@@ -4,7 +4,7 @@
  *
  * 環境変数:
  * - SUPABASE_URL: SupabaseプロジェクトURL
- * - SUPABASE_SERVICE_ROLE_KEY: Supabaseサービスロールキー
+ * - SERVICE_ROLE_KEY: Supabaseサービスロールキー
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -20,7 +20,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY') ?? '';
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
