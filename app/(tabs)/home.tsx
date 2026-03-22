@@ -15,9 +15,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
-import { usePurchase } from '@/providers/PurchaseProvider';
 import { useHabits } from '@/hooks/useHabits';
 import { HabitCard } from '@/components/HabitCard';
+import { BannerAd } from '@/components/BannerAd';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING } from '@/constants/config';
 import type { UserStreak } from '@/types';
@@ -25,7 +25,6 @@ import type { UserStreak } from '@/types';
 export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
-  const { isPro } = usePurchase();
   const { todayHabitsWithLogs, isLoading, completeHabit, refetch } = useHabits();
   const [streak, setStreak] = useState<UserStreak | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -106,12 +105,7 @@ export default function Home() {
             </Text>
           </View>
         }
-        ListFooterComponent={
-          // バナー広告（Freeユーザーのみ）
-          !isPro ? <View style={styles.adBanner}>
-            <Text style={styles.adBannerText}>広告（Proプランで非表示）</Text>
-          </View> : null
-        }
+        ListFooterComponent={<BannerAd />}
       />
 
       {/* FAB（習慣追加ボタン） */}
@@ -189,20 +183,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
     textAlign: 'center',
-  },
-  adBanner: {
-    backgroundColor: COLORS.surface,
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginTop: SPACING.md,
-  },
-  adBannerText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
   },
   fab: {
     position: 'absolute',
