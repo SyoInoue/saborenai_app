@@ -1,6 +1,6 @@
 /**
- * ネイティブ風ホイールピッカーコンポーネント
- * ScrollViewのスナップを使ってiOSの時計ピッカー風UIを実現する
+ * スクロールホイールピッカー
+ * スナップスクロール + ハプティクスで「カチカチ」感を実現
  */
 
 import { useRef, useEffect, useCallback } from 'react';
@@ -12,6 +12,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { COLORS } from '@/constants/config';
 
 const ITEM_HEIGHT = 52;
@@ -27,7 +28,8 @@ interface WheelPickerProps {
 export function WheelPicker({ values, selectedIndex, onSelect, width = 80 }: WheelPickerProps) {
   const scrollRef = useRef<ScrollView>(null);
   const hasMomentum = useRef(false);
-  const padding = Math.floor(VISIBLE_COUNT / 2); // 上下のパディング行数
+  const lastHapticIndex = useRef(selectedIndex);
+  const padding = Math.floor(VISIBLE_COUNT / 2);
 
   // 初期スクロール位置を設定
   useEffect(() => {
@@ -36,6 +38,19 @@ export function WheelPicker({ values, selectedIndex, onSelect, width = 80 }: Whe
     }, 50);
     return () => clearTimeout(timer);
   }, []);
+
+  // スクロール中にインデックスが変わるたびに軽いバイブ（カチカチ感）
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const y = event.nativeEvent.contentOffset.y;
+      const index = Math.max(0, Math.min(values.length - 1, Math.round(y / ITEM_HEIGHT)));
+      if (index !== lastHapticIndex.current) {
+        lastHapticIndex.current = index;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    },
+    [values.length]
+  );
 
   const handleScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -54,17 +69,19 @@ export function WheelPicker({ values, selectedIndex, onSelect, width = 80 }: Whe
         pointerEvents="none"
       />
 
-      {/* 上側グラデーションマスク（見た目のみ） */}
-      <View style={[styles.fadeTop]} pointerEvents="none" />
-      <View style={[styles.fadeBottom]} pointerEvents="none" />
+      {/* 上下フェード */}
+      <View style={styles.fadeTop} pointerEvents="none" />
+      <View style={styles.fadeBottom} pointerEvents="none" />
 
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         snapToInterval={ITEM_HEIGHT}
-        decelerationRate="fast"
+        decelerationRate={0.9}
         bounces={false}
-        scrollEventThrottle={16}
+        scrollEventThrottle={8}
+        overScrollMode="never"
+        onScroll={handleScroll}
         onScrollBeginDrag={() => { hasMomentum.current = false; }}
         onMomentumScrollBegin={() => { hasMomentum.current = true; }}
         onScrollEndDrag={(e) => { if (!hasMomentum.current) handleScrollEnd(e); }}
@@ -116,7 +133,6 @@ const styles = StyleSheet.create({
     right: 0,
     height: ITEM_HEIGHT * 2,
     backgroundColor: 'transparent',
-    // iOS only: fade effect via pointer events
     zIndex: 2,
     pointerEvents: 'none',
   },
