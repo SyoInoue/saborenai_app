@@ -39,7 +39,8 @@ export const HABIT_LIMIT_FREE = 1;
 export const HABIT_LIMIT_PRO = 10;
 
 /** RevenueCat商品ID */
-export const REVENUECAT_PRO_PRODUCT_ID = 'pro_monthly';
+export const REVENUECAT_PRO_PRODUCT_ID_MONTHLY = 'pro_monthly';
+export const REVENUECAT_PRO_PRODUCT_ID_YEARLY = 'pro_yearly';
 
 /** ペナルティタイプ */
 export const PENALTY_TYPE_TEXT = 'text' as const;

@@ -6,8 +6,11 @@
 import React, { createContext, useContext, useEffect, useReducer } from 'react';
 import Purchases, { LOG_LEVEL, CustomerInfo } from 'react-native-purchases';
 import { Platform, Alert } from 'react-native';
-import { REVENUECAT_PRO_PRODUCT_ID } from '@/constants/config';
-import type { PurchaseContextType } from '@/types';
+import {
+  REVENUECAT_PRO_PRODUCT_ID_MONTHLY,
+  REVENUECAT_PRO_PRODUCT_ID_YEARLY,
+} from '@/constants/config';
+import type { PurchaseContextType, ProPlan } from '@/types';
 
 // =====================================================
 // 定数
@@ -96,14 +99,19 @@ export function PurchaseProvider({ children }: Props) {
   }, []);
 
   /**
-   * Proプランを購入する
+   * Proプランを購入する（月額 or 年額）
    */
-  const purchasePro = async (): Promise<void> => {
+  const purchasePro = async (plan: ProPlan = 'monthly'): Promise<void> => {
     dispatch({ type: 'SET_LOADING', payload: true });
+    const targetProductId =
+      plan === 'yearly'
+        ? REVENUECAT_PRO_PRODUCT_ID_YEARLY
+        : REVENUECAT_PRO_PRODUCT_ID_MONTHLY;
+
     try {
       const offerings = await Purchases.getOfferings();
       const proPackage = offerings.current?.availablePackages.find(
-        (pkg) => pkg.product.identifier === REVENUECAT_PRO_PRODUCT_ID
+        (pkg) => pkg.product.identifier === targetProductId
       );
 
       if (!proPackage) {
@@ -149,7 +157,7 @@ export function PurchaseProvider({ children }: Props) {
   const value: PurchaseContextType = {
     isPro: state.isPro,
     isLoading: state.isLoading,
-    purchasePro,
+    purchasePro: (plan?: ProPlan) => purchasePro(plan),
     restorePurchases,
   };
 

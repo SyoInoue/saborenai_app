@@ -92,10 +92,13 @@ export interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
+/** Proプランの課金プラン */
+export type ProPlan = 'monthly' | 'yearly';
+
 /** 課金コンテキストの型 */
 export interface PurchaseContextType {
   isPro: boolean;
   isLoading: boolean;
-  purchasePro: () => Promise<void>;
+  purchasePro: (plan?: ProPlan) => Promise<void>;
   restorePurchases: () => Promise<void>;
 }
