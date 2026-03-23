@@ -10,7 +10,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -18,6 +17,9 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useHabits } from '@/hooks/useHabits';
 import { HabitCard } from '@/components/HabitCard';
 import { BannerAd } from '@/components/BannerAd';
+import { HabitCardSkeleton, StreakSkeleton } from '@/components/SkeletonLoader';
+import { Toast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING } from '@/constants/config';
 import type { UserStreak } from '@/types';
@@ -28,6 +30,7 @@ export default function Home() {
   const { todayHabitsWithLogs, isLoading, completeHabit, refetch } = useHabits();
   const [streak, setStreak] = useState<UserStreak | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const { toast, showToast, hideToast } = useToast();
 
   /**
    * ストリーク情報を取得する
@@ -47,8 +50,21 @@ export default function Home() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([refetch(), fetchStreak()]);
+    try {
+      await Promise.all([refetch(), fetchStreak()]);
+    } catch {
+      showToast('更新に失敗しました', 'error');
+    }
     setIsRefreshing(false);
+  };
+
+  const handleComplete = async (logId: string) => {
+    try {
+      await completeHabit(logId);
+      showToast('完了しました！🎉', 'success');
+    } catch {
+      showToast('完了の記録に失敗しました', 'error');
+    }
   };
 
   useEffect(() => {
@@ -57,21 +73,30 @@ export default function Home() {
 
   const currentStreak = streak?.current_streak ?? 0;
 
+  // スケルトンローディング表示
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+      <View style={[styles.container, styles.listContent]}>
+        <StreakSkeleton />
+        <HabitCardSkeleton />
+        <HabitCardSkeleton />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        visible={toast.visible}
+        onHide={hideToast}
+      />
       <FlatList
         data={todayHabitsWithLogs}
         keyExtractor={(item) => item.habit.id}
         renderItem={({ item }) => (
-          <HabitCard item={item} onComplete={completeHabit} />
+          <HabitCard item={item} onComplete={handleComplete} />
         )}
         contentContainerStyle={styles.listContent}
         refreshControl={
@@ -123,12 +148,6 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: COLORS.background,
   },
   listContent: {
