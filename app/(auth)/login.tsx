@@ -12,12 +12,14 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { startXOAuthFlow } from '@/lib/x-api';
 import { COLORS, SPACING } from '@/constants/config';
 
 export default function Login() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
   /**
@@ -53,9 +55,10 @@ export default function Login() {
       }
 
       // Edge FunctionからカスタムJWTを受け取りSupabaseにセッション設定
-      const { access_token, refresh_token } = data as {
+      const { access_token, refresh_token, user_id } = data as {
         access_token: string;
         refresh_token: string;
+        user_id: string;
       };
 
       const { error: sessionError } = await supabase.auth.setSession({
@@ -66,7 +69,19 @@ export default function Login() {
       if (sessionError) {
         throw new Error(sessionError.message);
       }
-      // ナビゲーションは AuthProvider の onAuthStateChange → index.tsx が担当
+
+      // ユーザー情報を取得してonboarding状態に応じてナビゲーション
+      const { data: userData } = await supabase
+        .from('users')
+        .select('onboarding_completed')
+        .eq('id', user_id)
+        .single();
+
+      if (userData?.onboarding_completed) {
+        router.replace('/(tabs)/home');
+      } else {
+        router.replace('/(modals)/penalty-setup');
+      }
     } catch (error) {
       console.error('X OAuthエラー:', error);
       Alert.alert(
