@@ -29,17 +29,14 @@ export default function Login() {
   const handleXLogin = async () => {
     setIsLoading(true);
     try {
-      console.log('[Login] 1. OAuthフロー開始');
       const result = await startXOAuthFlow();
       if (!result) {
-        console.log('[Login] キャンセルされました');
         return;
       }
-      console.log('[Login] 2. OAuthフロー完了');
 
       const { code, codeVerifier } = result;
 
-      console.log('[Login] 3. Edge Function呼び出し');
+      // Edge Function にコードを送りトークン交換・ユーザー情報保存を依頼
       const { data, error } = await supabase.functions.invoke('x-oauth-callback', {
         body: { code, codeVerifier },
       });
@@ -53,7 +50,6 @@ export default function Login() {
         }
         throw new Error(error.message);
       }
-      console.log('[Login] 4. Edge Function成功');
 
       // setSession は React Native で AsyncStorage ロック競合が起きるため
       // email + ワンタイムパスワードを受け取り signInWithPassword で直接ログイン
@@ -63,7 +59,6 @@ export default function Login() {
         user_id: string;
       };
 
-      console.log('[Login] 5. signInWithPassword開始');
       const { error: sessionError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -72,22 +67,17 @@ export default function Login() {
       if (sessionError) {
         throw new Error(sessionError.message);
       }
-      console.log('[Login] 6. signInWithPassword完了');
 
-
-      console.log('[Login] 7. usersテーブル取得');
-      const { data: userData, error: userError } = await supabase
+      // onboarding 状態に応じてナビゲーション
+      const { data: userData } = await supabase
         .from('users')
         .select('onboarding_completed')
         .eq('id', user_id)
         .single();
-      console.log('[Login] 8. usersテーブル取得完了', userData, userError);
 
       if (userData?.onboarding_completed) {
-        console.log('[Login] 9. ホームへ遷移');
         router.replace('/(tabs)/home');
       } else {
-        console.log('[Login] 9. penalty-setupへ遷移');
         router.replace('/(modals)/penalty-setup');
       }
     } catch (error) {
