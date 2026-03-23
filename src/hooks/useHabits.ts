@@ -6,13 +6,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
-import type { Habit, HabitFormData, HabitLog, HabitWithLog, HabitCardStatus } from '@/types';
+import type { Habit, HabitFormData, HabitLog, HabitWithLog, HabitCardStatus, WeekDay } from '@/types';
 
 /**
  * 今日の曜日番号を取得する（0=日曜日）
  */
-function getTodayWeekday(): number {
-  return new Date().getDay();
+function getTodayWeekday(): WeekDay {
+  return new Date().getDay() as WeekDay;
 }
 
 /**
