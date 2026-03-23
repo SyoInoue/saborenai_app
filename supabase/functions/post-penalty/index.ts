@@ -47,7 +47,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY') ?? '';
+  // SUPABASE_SERVICE_ROLE_KEY は Supabase が自動提供する環境変数
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? '';
   const clientId = Deno.env.get('X_CLIENT_ID') ?? '';
   const clientSecret = Deno.env.get('X_CLIENT_SECRET') ?? '';
 
