@@ -61,7 +61,11 @@ export default function Login() {
         user_id: string;
       };
 
-      console.log('[Login] 5. setSession開始');
+      // ローカルの古いセッション状態をクリア（AsyncStorageのロック競合を防ぐ）
+      console.log('[Login] 5. ローカルセッションクリア');
+      await supabase.auth.signOut({ scope: 'local' });
+
+      console.log('[Login] 5.5. setSession開始');
       const { error: sessionError } = await supabase.auth.setSession({
         access_token,
         refresh_token,
@@ -71,6 +75,7 @@ export default function Login() {
         throw new Error(sessionError.message);
       }
       console.log('[Login] 6. setSession完了');
+
 
       console.log('[Login] 7. usersテーブル取得');
       const { data: userData, error: userError } = await supabase
