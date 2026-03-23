@@ -12,14 +12,12 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { startXOAuthFlow } from '@/lib/x-api';
 import { COLORS, SPACING } from '@/constants/config';
 
 export default function Login() {
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
   /**
@@ -44,6 +42,13 @@ export default function Login() {
       });
 
       if (error) {
+        console.error('Edge Functionエラー詳細:', JSON.stringify(error));
+        // レスポンスボディも取得
+        const context = error.context as { text?: () => Promise<string> } | undefined;
+        if (context?.text) {
+          const body = await context.text();
+          console.error('Edge Functionレスポンスボディ:', body);
+        }
         throw new Error(error.message);
       }
 
@@ -61,9 +66,7 @@ export default function Login() {
       if (sessionError) {
         throw new Error(sessionError.message);
       }
-
-      // ペナルティ設定画面へ遷移
-      router.replace('/(modals)/penalty-setup');
+      // ナビゲーションは AuthProvider の onAuthStateChange → index.tsx が担当
     } catch (error) {
       console.error('X OAuthエラー:', error);
       Alert.alert(

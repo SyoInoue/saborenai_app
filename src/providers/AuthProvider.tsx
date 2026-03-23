@@ -63,6 +63,10 @@ export function AuthProvider({ children }: Props) {
 
     if (error) {
       console.error('ユーザー情報取得エラー:', error);
+      // ユーザーがDBに存在しない場合は古いセッションを破棄してサインアウト
+      if (error.code === 'PGRST116') {
+        await supabase.auth.signOut();
+      }
       dispatch({ type: 'SET_USER', payload: null });
       return;
     }
