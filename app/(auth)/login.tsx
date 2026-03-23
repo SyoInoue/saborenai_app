@@ -55,26 +55,24 @@ export default function Login() {
       }
       console.log('[Login] 4. Edge Function成功');
 
-      const { access_token, refresh_token, user_id } = data as {
-        access_token: string;
-        refresh_token: string;
+      // setSession は React Native で AsyncStorage ロック競合が起きるため
+      // email + ワンタイムパスワードを受け取り signInWithPassword で直接ログイン
+      const { email, password, user_id } = data as {
+        email: string;
+        password: string;
         user_id: string;
       };
 
-      // ローカルの古いセッション状態をクリア（AsyncStorageのロック競合を防ぐ）
-      console.log('[Login] 5. ローカルセッションクリア');
-      await supabase.auth.signOut({ scope: 'local' });
-
-      console.log('[Login] 5.5. setSession開始');
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token,
-        refresh_token,
+      console.log('[Login] 5. signInWithPassword開始');
+      const { error: sessionError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
       if (sessionError) {
         throw new Error(sessionError.message);
       }
-      console.log('[Login] 6. setSession完了');
+      console.log('[Login] 6. signInWithPassword完了');
 
 
       console.log('[Login] 7. usersテーブル取得');

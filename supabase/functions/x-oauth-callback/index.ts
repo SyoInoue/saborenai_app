@@ -111,15 +111,14 @@ Deno.serve(async (req: Request) => {
     let authUserId: string;
 
     if (existingAuthUser) {
-      // 既存ユーザー: パスワードを更新して確実にログインできるようにする
+      // 既存ユーザー
       authUserId = existingAuthUser.id;
-      await supabase.auth.admin.updateUserById(authUserId, { password, email_confirm: true });
       console.log('既存authユーザー:', authUserId);
     } else {
-      // 新規ユーザー作成
+      // 新規ユーザー作成（パスワードは後でワンタイムパスワードに更新するのでダミーを設定）
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
         email,
-        password,
+        password: `init-${xUser.id}`,
         email_confirm: true,
         user_metadata: { x_user_id: xUser.id },
       });
@@ -167,27 +166,34 @@ Deno.serve(async (req: Request) => {
     }
 
     // =====================================================
-    // 5. セッション発行
+    // 5. ワンタイムパスワードを生成してクライアントに返す
+    //    クライアント側で signInWithPassword を呼ぶことで setSession の
+    //    React Native バグ（AsyncStorage ロック競合）を回避する
     // =====================================================
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const randomBytes = new Uint8Array(32);
+    globalThis.crypto.getRandomValues(randomBytes);
+    const oneTimePassword = btoa(String.fromCharCode(...randomBytes));
+
+    // ユーザーのパスワードをワンタイムパスワードに更新
+    const { error: updateError } = await supabase.auth.admin.updateUserById(authUserId, {
+      password: oneTimePassword,
+      email_confirm: true,
     });
 
-    if (signInError || !signInData?.session) {
-      console.error('サインインエラー:', signInError);
+    if (updateError) {
+      console.error('パスワード更新エラー:', updateError);
       return new Response(
-        JSON.stringify({ error: 'サインインに失敗しました', detail: signInError?.message }),
+        JSON.stringify({ error: 'パスワード更新に失敗しました', detail: updateError.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('ログイン成功:', authUserId);
+    console.log('ログイン準備完了:', authUserId);
 
     return new Response(
       JSON.stringify({
-        access_token: signInData.session.access_token,
-        refresh_token: signInData.session.refresh_token,
+        email,
+        password: oneTimePassword,
         user_id: authUserId,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
