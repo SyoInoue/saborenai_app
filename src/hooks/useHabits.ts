@@ -64,10 +64,18 @@ export function useHabits() {
 
     if (error) {
       console.error('習慣取得エラー:', error);
+      setIsLoading(false);
       return;
     }
 
-    setHabits((data ?? []) as Habit[]);
+    const result = (data ?? []) as Habit[];
+    setHabits(result);
+
+    // 習慣が0件の場合はログ待ちがないので即座にローディング完了
+    // 1件以上の場合は upsertTodayLogs 完了後に isLoading=false になる
+    if (result.length === 0) {
+      setIsLoading(false);
+    }
   }, [user]);
 
   /**
@@ -76,7 +84,7 @@ export function useHabits() {
   const upsertTodayLogs = useCallback(async (habitList: Habit[]) => {
     if (!user || habitList.length === 0) {
       setTodayLogs([]);
-      setIsLoading(false);
+      // isLoading は fetchHabits 側で管理（ここでは触らない）
       return;
     }
 

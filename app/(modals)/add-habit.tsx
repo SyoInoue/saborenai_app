@@ -19,12 +19,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useHabits } from '@/hooks/useHabits';
 import { usePurchase } from '@/providers/PurchaseProvider';
 import { tempStore } from '@/lib/tempStore';
-import { WheelPicker } from '@/components/WheelPicker';
 import { COLORS, SPACING, HABIT_LIMIT_FREE, HABIT_LIMIT_PRO, PENALTY_TWEET_TEXT } from '@/constants/config';
 import type { WeekDay, PenaltyType } from '@/types';
-
-const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
 
 const WEEKDAYS: { label: string; value: WeekDay }[] = [
   { label: '日', value: 0 },
@@ -42,8 +38,8 @@ export default function AddHabit() {
   const { isPro, purchasePro, isLoading: isPurchaseLoading } = usePurchase();
 
   const [name, setName] = useState('');
-  const [deadlineHour, setDeadlineHour] = useState(21); // 0-23 index
-  const [deadlineMinuteIndex, setDeadlineMinuteIndex] = useState(0); // 0-11 index (×5 = actual minute)
+  const [deadlineHour, setDeadlineHour] = useState(21);
+  const [deadlineMinute, setDeadlineMinute] = useState(0);
   const [repeatDays, setRepeatDays] = useState<WeekDay[]>([1, 2, 3, 4, 5]);
   const [penaltyType, setPenaltyType] = useState<PenaltyType>('text');
   const [penaltyText, setPenaltyText] = useState(PENALTY_TWEET_TEXT);
@@ -163,7 +159,6 @@ export default function AddHabit() {
 
     setIsSaving(true);
     try {
-      const deadlineMinute = deadlineMinuteIndex * 5;
       await addHabit({
         name: name.trim(),
         deadline_time: `${String(deadlineHour).padStart(2, '0')}:${String(deadlineMinute).padStart(2, '0')}`,
@@ -199,29 +194,29 @@ export default function AddHabit() {
         />
       </View>
 
-      {/* 期限時刻（ホイールピッカー） */}
+      {/* 期限時刻（トグル式） */}
       <View style={styles.section}>
         <Text style={styles.label}>期限時刻</Text>
         <Text style={styles.labelHint}>この時刻までに完了しないとペナルティが発動します</Text>
         <View style={styles.timePickerContainer}>
-          <View style={styles.timePickerColumn}>
-            <Text style={styles.timePickerLabel}>時</Text>
-            <WheelPicker
-              values={HOURS}
-              selectedIndex={deadlineHour}
-              onSelect={setDeadlineHour}
-              width={90}
-            />
+          <View style={styles.timeUnit}>
+            <TouchableOpacity style={styles.arrowButton} onPress={() => setDeadlineHour((h) => (h + 1) % 24)}>
+              <Text style={styles.arrowText}>▲</Text>
+            </TouchableOpacity>
+            <Text style={styles.timeValue}>{String(deadlineHour).padStart(2, '0')}</Text>
+            <TouchableOpacity style={styles.arrowButton} onPress={() => setDeadlineHour((h) => (h - 1 + 24) % 24)}>
+              <Text style={styles.arrowText}>▼</Text>
+            </TouchableOpacity>
           </View>
           <Text style={styles.timeSeparator}>:</Text>
-          <View style={styles.timePickerColumn}>
-            <Text style={styles.timePickerLabel}>分</Text>
-            <WheelPicker
-              values={MINUTES}
-              selectedIndex={deadlineMinuteIndex}
-              onSelect={setDeadlineMinuteIndex}
-              width={90}
-            />
+          <View style={styles.timeUnit}>
+            <TouchableOpacity style={styles.arrowButton} onPress={() => setDeadlineMinute((m) => (m + 5) % 60)}>
+              <Text style={styles.arrowText}>▲</Text>
+            </TouchableOpacity>
+            <Text style={styles.timeValue}>{String(deadlineMinute).padStart(2, '0')}</Text>
+            <TouchableOpacity style={styles.arrowButton} onPress={() => setDeadlineMinute((m) => (m - 5 + 60) % 60)}>
+              <Text style={styles.arrowText}>▼</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -333,12 +328,14 @@ const styles = StyleSheet.create({
   // 時間ピッカー
   timePickerContainer: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: COLORS.surface, borderRadius: 16, paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.surface, borderRadius: 16, paddingVertical: SPACING.md,
     borderWidth: 1, borderColor: COLORS.border,
   },
-  timePickerColumn: { alignItems: 'center', gap: SPACING.xs },
-  timePickerLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: '600' },
-  timeSeparator: { fontSize: 36, fontWeight: 'bold', color: COLORS.text, marginTop: 20, marginHorizontal: 4 },
+  timeUnit: { alignItems: 'center', gap: 4 },
+  arrowButton: { padding: SPACING.sm },
+  arrowText: { fontSize: 18, color: COLORS.primary, fontWeight: 'bold' },
+  timeValue: { fontSize: 36, fontWeight: 'bold', color: COLORS.text, minWidth: 56, textAlign: 'center' },
+  timeSeparator: { fontSize: 36, fontWeight: 'bold', color: COLORS.text, marginHorizontal: 4, marginBottom: 4 },
 
   // 曜日選択
   daysContainer: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },

@@ -1,12 +1,13 @@
 /**
  * 習慣カードコンポーネント
  * カウントダウン・完了ボタン・各種状態の表示を担当する
+ * status は毎秒リアルタイムに再計算するため、期限切れと同時にボタンが消える
  */
 
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { COLORS, SPACING } from '@/constants/config';
-import type { HabitWithLog } from '@/types';
+import type { HabitCardStatus, HabitWithLog } from '@/types';
 
 type Props = {
   item: HabitWithLog;
@@ -22,35 +23,36 @@ function formatRemainingTime(ms: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds]
-    .map((v) => String(v).padStart(2, '0'))
-    .join(':');
+  return [hours, minutes, seconds].map((v) => String(v).padStart(2, '0')).join(':');
 }
 
 export function HabitCard({ item, onComplete }: Props) {
-  const { habit, log, status } = item;
-  const [remainingMs, setRemainingMs] = useState(0);
+  const { habit, log } = item;
+  const [now, setNow] = useState(Date.now());
   const [isCompleting, setIsCompleting] = useState(false);
 
-  // カウントダウンタイマー
+  // 毎秒 now を更新してステータス・カウントダウンをリアルタイム再計算
   useEffect(() => {
-    if (!log?.deadline_at || status === 'completed' || status === 'penalized') return;
-
-    const deadline = new Date(log.deadline_at).getTime();
-
-    const tick = () => {
-      const remaining = deadline - Date.now();
-      setRemainingMs(remaining);
-    };
-
-    tick();
-    const interval = setInterval(tick, 1000);
+    const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
-  }, [log?.deadline_at, status]);
+  }, []);
+
+  // 期限の Unix タイムスタンプ
+  const deadlineTs = log?.deadline_at ? new Date(log.deadline_at).getTime() : null;
+
+  // ステータスをリアルタイム計算（毎秒更新）
+  const status: HabitCardStatus = (() => {
+    if (!log) return 'pending';
+    if (log.completed_at) return 'completed';
+    if (log.penalty_triggered) return 'penalized';
+    if (deadlineTs && now > deadlineTs) return 'overdue';
+    return 'pending';
+  })();
+
+  const remainingMs = deadlineTs ? deadlineTs - now : 0;
 
   const handleComplete = () => {
     if (!log) return;
-
     Alert.alert(
       '完了確認',
       '本当に完了しましたか？',
@@ -74,7 +76,6 @@ export function HabitCard({ item, onComplete }: Props) {
     );
   };
 
-  // ステータスに応じたスタイルとラベル
   const isOverdue = status === 'overdue' || status === 'penalized';
   const isCompleted = status === 'completed';
 
@@ -105,11 +106,11 @@ export function HabitCard({ item, onComplete }: Props) {
         </View>
       </View>
 
-      {/* カウントダウン */}
-      {status === 'pending' && log?.deadline_at && (
+      {/* カウントダウン（pending かつ期限あり） */}
+      {status === 'pending' && deadlineTs && (
         <View style={[
           styles.countdown,
-          remainingMs < 30 * 60 * 1000 && styles.countdownUrgent, // 30分未満
+          remainingMs < 30 * 60 * 1000 && styles.countdownUrgent,
         ]}>
           <Text style={[
             styles.countdownText,
@@ -120,28 +121,28 @@ export function HabitCard({ item, onComplete }: Props) {
         </View>
       )}
 
-      {/* 完了済みラベル */}
+      {/* 達成バッジ */}
       {isCompleted && (
         <View style={styles.completedBadge}>
           <Text style={styles.completedBadgeText}>達成！</Text>
         </View>
       )}
 
-      {/* ペナルティ執行済みラベル */}
+      {/* ペナルティ執行済み */}
       {status === 'penalized' && (
         <View style={styles.penaltyBadge}>
           <Text style={styles.penaltyBadgeText}>ペナルティ執行済み</Text>
         </View>
       )}
 
-      {/* 期限切れ（まだペナルティ未執行）ラベル */}
+      {/* 期限切れ（ペナルティ未発動） */}
       {status === 'overdue' && (
         <View style={styles.overdueBadge}>
           <Text style={styles.overdueBadgeText}>期限切れ</Text>
         </View>
       )}
 
-      {/* 完了ボタン */}
+      {/* 完了ボタン（pending のみ表示 — 期限切れになると自動で消える） */}
       {status === 'pending' && (
         <TouchableOpacity
           style={[styles.completeButton, isCompleting && styles.buttonDisabled]}
@@ -196,13 +197,8 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: COLORS.textSecondary,
   },
-  checkmark: {
-    fontSize: 22,
-    color: COLORS.success,
-  },
-  penaltyIcon: {
-    fontSize: 22,
-  },
+  checkmark: { fontSize: 22, color: COLORS.success },
+  penaltyIcon: { fontSize: 22 },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -213,9 +209,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
   },
-  deadlineOverdue: {
-    color: COLORS.danger,
-  },
+  deadlineOverdue: { color: COLORS.danger },
   penaltyChip: {
     backgroundColor: '#F0F4FF',
     borderRadius: 6,
@@ -235,18 +229,14 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: SPACING.sm,
   },
-  countdownUrgent: {
-    backgroundColor: '#FFF3CD',
-  },
+  countdownUrgent: { backgroundColor: '#FFF3CD' },
   countdownText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#4F46E5',
     fontVariant: ['tabular-nums'],
   },
-  countdownTextUrgent: {
-    color: '#D97706',
-  },
+  countdownTextUrgent: { color: '#D97706' },
   completedBadge: {
     backgroundColor: '#D4EDDA',
     borderRadius: 8,
@@ -292,9 +282,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
+  buttonDisabled: { opacity: 0.6 },
   completeButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
