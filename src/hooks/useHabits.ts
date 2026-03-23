@@ -146,6 +146,9 @@ export function useHabits() {
       name: formData.name,
       deadline_time: `${formData.deadline_time}:00`, // HH:MM → HH:MM:SS
       repeat_days: formData.repeat_days,
+      penalty_type: formData.penalty_type,
+      penalty_text: formData.penalty_text,
+      selfie_storage_path: formData.selfie_storage_path,
     });
 
     if (error) throw new Error(error.message);

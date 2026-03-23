@@ -3,7 +3,7 @@
  * ストリーク + 今日のタスクカード一覧 + FAB + バナー広告
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { useHabits } from '@/hooks/useHabits';
 import { HabitCard } from '@/components/HabitCard';
@@ -70,6 +70,14 @@ export default function Home() {
   useEffect(() => {
     fetchStreak();
   }, [user]);
+
+  // モーダルから戻ってきた時（習慣追加後など）に最新データを取得
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+      fetchStreak();
+    }, [refetch])
+  );
 
   const currentStreak = streak?.current_streak ?? 0;
 

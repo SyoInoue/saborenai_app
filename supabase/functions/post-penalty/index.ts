@@ -26,9 +26,13 @@ interface UserRecord {
   x_access_token: string;
   x_refresh_token: string;
   x_token_expires_at: string;
-  penalty_type: string;
-  selfie_storage_path: string | null;
   expo_push_token: string | null;
+}
+
+interface HabitRecord {
+  penalty_type: string;
+  penalty_text: string | null;
+  selfie_storage_path: string | null;
 }
 
 interface RefreshedTokens {
@@ -60,23 +64,41 @@ Deno.serve(async (req: Request) => {
     }
 
     // =====================================================
-    // 1. ユーザー情報取得
+    // 1. ユーザー情報・習慣のペナルティ設定取得
     // =====================================================
-    const { data: userRecord, error: userError } = await supabase
-      .from('users')
-      .select('x_access_token, x_refresh_token, x_token_expires_at, penalty_type, selfie_storage_path, expo_push_token')
-      .eq('id', user_id)
-      .single();
+    const [userResult, logResult] = await Promise.all([
+      supabase
+        .from('users')
+        .select('x_access_token, x_refresh_token, x_token_expires_at, expo_push_token')
+        .eq('id', user_id)
+        .single(),
+      supabase
+        .from('habit_logs')
+        .select('habit_id')
+        .eq('id', log_id)
+        .single(),
+    ]);
 
-    if (userError || !userRecord) {
-      console.error('ユーザー取得エラー:', userError);
+    if (userResult.error || !userResult.data) {
+      console.error('ユーザー取得エラー:', userResult.error);
       return new Response(
         JSON.stringify({ error: 'ユーザーが見つかりません' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const user = userRecord as UserRecord;
+    const user = userResult.data as UserRecord;
+
+    // 習慣のペナルティ設定取得
+    let habit: HabitRecord = { penalty_type: 'text', penalty_text: null, selfie_storage_path: null };
+    if (!logResult.error && logResult.data?.habit_id) {
+      const { data: habitData } = await supabase
+        .from('habits')
+        .select('penalty_type, penalty_text, selfie_storage_path')
+        .eq('id', logResult.data.habit_id)
+        .single();
+      if (habitData) habit = habitData as HabitRecord;
+    }
 
     // =====================================================
     // 2. アクセストークンのリフレッシュ
@@ -132,18 +154,21 @@ Deno.serve(async (req: Request) => {
     // =====================================================
     let tweetId: string | null = null;
 
-    if (user.penalty_type === 'selfie' && user.selfie_storage_path) {
+    const penaltyText = habit.penalty_text ?? PENALTY_TEXT;
+
+    if (habit.penalty_type === 'selfie' && habit.selfie_storage_path) {
       // 自撮りモード: Storage から画像を取得して media/upload → tweet
       tweetId = await postSelfie(
         supabase,
         supabaseUrl,
         serviceRoleKey,
         freshTokens.access_token,
-        user.selfie_storage_path
+        habit.selfie_storage_path,
+        penaltyText
       );
     } else {
       // テキストモード
-      tweetId = await postTextTweet(freshTokens.access_token, PENALTY_TEXT);
+      tweetId = await postTextTweet(freshTokens.access_token, penaltyText);
     }
 
     // =====================================================
@@ -213,7 +238,8 @@ async function postSelfie(
   supabaseUrl: string,
   serviceRoleKey: string,
   accessToken: string,
-  storagePath: string
+  storagePath: string,
+  penaltyText: string
 ): Promise<string | null> {
   // Supabase Storageから画像を取得
   const { data: fileData, error: downloadError } = await supabase.storage
@@ -223,7 +249,7 @@ async function postSelfie(
   if (downloadError || !fileData) {
     console.error('自撮り画像取得エラー:', downloadError);
     // 自撮り失敗時はテキストのみで投稿
-    return postTextTweet(accessToken, PENALTY_TEXT);
+    return postTextTweet(accessToken, penaltyText);
   }
 
   // X media/upload に画像をアップロード (v1.1)
@@ -247,7 +273,7 @@ async function postSelfie(
   const mediaData = await mediaRes.json() as { media_id_string: string };
 
   // 画像付きツイートを投稿
-  const tweetText = `[自撮り写真] ${PENALTY_TEXT}`;
+  const tweetText = penaltyText;
   const res = await fetch(X_TWEETS_URL, {
     method: 'POST',
     headers: {

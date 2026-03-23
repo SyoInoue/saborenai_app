@@ -36,6 +36,9 @@ export interface Habit {
   deadline_time: string; // "HH:MM:SS" 形式
   repeat_days: WeekDay[];
   is_active: boolean;
+  penalty_type: PenaltyType;
+  penalty_text: string | null;
+  selfie_storage_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +69,9 @@ export interface HabitFormData {
   name: string;
   deadline_time: string; // "HH:MM" 形式
   repeat_days: WeekDay[];
+  penalty_type: PenaltyType;
+  penalty_text: string | null;
+  selfie_storage_path: string | null;
 }
 
 /** 習慣カードの表示状態 */
