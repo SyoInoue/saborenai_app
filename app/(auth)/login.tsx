@@ -88,7 +88,7 @@ export default function Login() {
       </LinearGradient>
 
       <View style={styles.body}>
-        <Text style={styles.title}>Xアカウントで\nログイン</Text>
+        <Text style={styles.title}>Xアカウントで{'\n'}ログイン</Text>
         <Text style={styles.subtitle}>
           ペナルティ投稿のためにXアカウントとの連携が必要です
         </Text>
