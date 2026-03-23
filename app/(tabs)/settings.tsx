@@ -3,7 +3,7 @@
  * アカウント情報・ペナルティ設定変更・習慣管理・Pro課金・ログアウト
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePurchase } from '@/providers/PurchaseProvider';
 import { useHabits } from '@/hooks/useHabits';
@@ -26,7 +26,14 @@ export default function Settings() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { isPro, purchasePro, restorePurchases, isLoading: isPurchaseLoading } = usePurchase();
-  const { habits, deleteHabit } = useHabits();
+  const { habits, deleteHabit, refetch } = useHabits();
+
+  // タブフォーカス時に習慣一覧を再取得
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<ProPlan>('monthly');
 
@@ -120,20 +127,6 @@ export default function Settings() {
             </View>
           )}
         </View>
-      </View>
-
-      {/* ペナルティ設定変更 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>ペナルティ設定</Text>
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => router.push('/(modals)/penalty-setup')}
-        >
-          <Text style={styles.menuItemText}>
-            {user.penalty_type === 'selfie' ? '📸 自撮りモード' : '📝 テキストモード'}
-          </Text>
-          <Text style={styles.menuItemArrow}>›</Text>
-        </TouchableOpacity>
       </View>
 
       {/* 習慣管理 */}

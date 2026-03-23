@@ -3,7 +3,7 @@
  * 習慣のCRUD操作とリアルタイム購読を提供する
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import type { Habit, HabitFormData, HabitLog, HabitWithLog, HabitCardStatus, WeekDay } from '@/types';
@@ -46,6 +46,8 @@ export function useHabits() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [todayLogs, setTodayLogs] = useState<HabitLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // 複数箇所でuseHabitsを使う際にチャンネル名が衝突しないよう一意IDを付与
+  const channelSuffix = useRef(`${Date.now()}_${Math.random().toString(36).slice(2)}`).current;
 
   /**
    * 習慣一覧を取得する
@@ -208,7 +210,7 @@ export function useHabits() {
     if (!user) return;
 
     const habitsSubscription = supabase
-      .channel('habits_changes')
+      .channel(`habits_changes_${channelSuffix}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'habits', filter: `user_id=eq.${user.id}` },
@@ -217,7 +219,7 @@ export function useHabits() {
       .subscribe();
 
     const logsSubscription = supabase
-      .channel('logs_changes')
+      .channel(`logs_changes_${channelSuffix}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'habit_logs', filter: `user_id=eq.${user.id}` },

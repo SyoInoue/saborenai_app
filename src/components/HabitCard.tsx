@@ -93,10 +93,17 @@ export function HabitCard({ item, onComplete }: Props) {
         {status === 'penalized' && <Text style={styles.penaltyIcon}>⚡</Text>}
       </View>
 
-      {/* 期限時刻 */}
-      <Text style={[styles.deadline, isOverdue && styles.deadlineOverdue]}>
-        期限: {habit.deadline_time.slice(0, 5)}
-      </Text>
+      {/* 期限時刻 & ペナルティタイプ */}
+      <View style={styles.metaRow}>
+        <Text style={[styles.deadline, isOverdue && styles.deadlineOverdue]}>
+          期限: {habit.deadline_time.slice(0, 5)}
+        </Text>
+        <View style={styles.penaltyChip}>
+          <Text style={styles.penaltyChipText}>
+            {habit.penalty_type === 'selfie' ? '📸 自撮り' : '📝 テキスト'}
+          </Text>
+        </View>
+      </View>
 
       {/* カウントダウン */}
       {status === 'pending' && log?.deadline_at && (
@@ -196,13 +203,29 @@ const styles = StyleSheet.create({
   penaltyIcon: {
     fontSize: 22,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
   deadline: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
   },
   deadlineOverdue: {
     color: COLORS.danger,
+  },
+  penaltyChip: {
+    backgroundColor: '#F0F4FF',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  penaltyChipText: {
+    fontSize: 11,
+    color: '#4F46E5',
+    fontWeight: '600',
   },
   countdown: {
     backgroundColor: '#EEF2FF',
