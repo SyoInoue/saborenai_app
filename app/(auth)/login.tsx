@@ -29,23 +29,23 @@ export default function Login() {
   const handleXLogin = async () => {
     setIsLoading(true);
     try {
-      // PKCE フローでXのOAuth認証を開始
+      console.log('[Login] 1. OAuthフロー開始');
       const result = await startXOAuthFlow();
       if (!result) {
-        // ユーザーがキャンセルした場合は何もしない
+        console.log('[Login] キャンセルされました');
         return;
       }
+      console.log('[Login] 2. OAuthフロー完了');
 
       const { code, codeVerifier } = result;
 
-      // Edge Function にコードを送りトークン交換・ユーザー情報保存を依頼
+      console.log('[Login] 3. Edge Function呼び出し');
       const { data, error } = await supabase.functions.invoke('x-oauth-callback', {
         body: { code, codeVerifier },
       });
 
       if (error) {
-        console.error('Edge Functionエラー詳細:', JSON.stringify(error));
-        // レスポンスボディも取得
+        console.error('Edge Functionエラー:', JSON.stringify(error));
         const context = error.context as { text?: () => Promise<string> } | undefined;
         if (context?.text) {
           const body = await context.text();
@@ -53,14 +53,15 @@ export default function Login() {
         }
         throw new Error(error.message);
       }
+      console.log('[Login] 4. Edge Function成功');
 
-      // Edge FunctionからカスタムJWTを受け取りSupabaseにセッション設定
       const { access_token, refresh_token, user_id } = data as {
         access_token: string;
         refresh_token: string;
         user_id: string;
       };
 
+      console.log('[Login] 5. setSession開始');
       const { error: sessionError } = await supabase.auth.setSession({
         access_token,
         refresh_token,
@@ -69,17 +70,21 @@ export default function Login() {
       if (sessionError) {
         throw new Error(sessionError.message);
       }
+      console.log('[Login] 6. setSession完了');
 
-      // ユーザー情報を取得してonboarding状態に応じてナビゲーション
-      const { data: userData } = await supabase
+      console.log('[Login] 7. usersテーブル取得');
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('onboarding_completed')
         .eq('id', user_id)
         .single();
+      console.log('[Login] 8. usersテーブル取得完了', userData, userError);
 
       if (userData?.onboarding_completed) {
+        console.log('[Login] 9. ホームへ遷移');
         router.replace('/(tabs)/home');
       } else {
+        console.log('[Login] 9. penalty-setupへ遷移');
         router.replace('/(modals)/penalty-setup');
       }
     } catch (error) {
