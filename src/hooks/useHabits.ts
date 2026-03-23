@@ -17,10 +17,14 @@ function getTodayWeekday(): WeekDay {
 
 /**
  * 今日の日付文字列を取得する（YYYY-MM-DD）
+ * toISOString() はUTC基準なのでデバイスのローカル時刻を使う
  */
 function getTodayString(): string {
   const today = new Date();
-  return today.toISOString().split('T')[0];
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**
