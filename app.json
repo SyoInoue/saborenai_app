@@ -18,7 +18,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "ペナルティ用の自撮り写真を撮影するために使用します。",
         "NSPhotoLibraryUsageDescription": "自撮り写真を保存するために使用します。",
-        "NSUserNotificationsUsageDescription": "習慣のリマインダーとペナルティ通知を送信するために使用します."
+        "NSUserNotificationsUsageDescription": "習慣のリマインダーとペナルティ通知を送信するために使用します.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -26,7 +27,11 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.inouesyo.saboapp"
+      "package": "com.inouesyo.saboapp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -44,10 +49,24 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "916ad348-d11a-42d2-b24e-64bf7c2252dd"
+      }
+    },
+    "owner": "syoinoue"
   }
 }
