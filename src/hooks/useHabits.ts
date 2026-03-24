@@ -250,9 +250,33 @@ export function useHabits() {
       )
       .subscribe();
 
+    // リアルタイムが届かない場合の保険: 30秒ごとに今日のログをポーリング
+    const pollInterval = setInterval(async () => {
+      const today = getTodayString();
+      const { data } = await supabase
+        .from('habit_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('target_date', today);
+      if (data) {
+        setTodayLogs((prev) => {
+          // penalty_executed_at など変化があった場合のみ更新
+          const hasChange = data.some((newLog) => {
+            const old = prev.find((l) => l.id === newLog.id);
+            return !old ||
+              old.penalty_executed_at !== newLog.penalty_executed_at ||
+              old.penalty_triggered !== newLog.penalty_triggered ||
+              old.completed_at !== newLog.completed_at;
+          });
+          return hasChange ? (data as HabitLog[]) : prev;
+        });
+      }
+    }, 30000);
+
     return () => {
       supabase.removeChannel(habitsSubscription);
       supabase.removeChannel(logsSubscription);
+      clearInterval(pollInterval);
     };
   }, [user, fetchHabits]);
 
