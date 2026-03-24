@@ -72,9 +72,16 @@ export default function SelfieCapture() {
         ? `${user.id}/habit_${Date.now()}.jpg`
         : `${user.id}/penalty.jpg`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('selfies')
-        .upload(storagePath, blob, { contentType: 'image/jpeg', upsert: true });
+      // タイムアウト対策: 最大3回リトライ
+      let uploadError = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const { error } = await supabase.storage
+          .from('selfies')
+          .upload(storagePath, blob, { contentType: 'image/jpeg', upsert: true });
+        uploadError = error;
+        if (!error) break;
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
 
       if (uploadError) throw new Error(uploadError.message);
 
