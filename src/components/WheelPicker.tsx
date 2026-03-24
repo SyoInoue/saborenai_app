@@ -15,8 +15,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import { COLORS } from '@/constants/config';
 
-const ITEM_HEIGHT = 52;
-const VISIBLE_COUNT = 5; // 奇数にすること（中央が選択状態）
+const ITEM_HEIGHT = 56;
+const VISIBLE_COUNT = 3; // 奇数にすること（中央が選択状態）
 
 interface WheelPickerProps {
   values: string[];
@@ -25,19 +25,21 @@ interface WheelPickerProps {
   width?: number;
 }
 
-export function WheelPicker({ values, selectedIndex, onSelect, width = 80 }: WheelPickerProps) {
+export function WheelPicker({ values, selectedIndex, onSelect, width = 90 }: WheelPickerProps) {
   const scrollRef = useRef<ScrollView>(null);
   const hasMomentum = useRef(false);
-  const lastHapticIndex = useRef(selectedIndex);
+  const lastHapticIndex = useRef(-1);
+  const isUserScrolling = useRef(false);
   const padding = Math.floor(VISIBLE_COUNT / 2);
 
-  // 初期スクロール位置を設定
+  // 初期スクロール位置を設定（ユーザー操作中は無視）
   useEffect(() => {
+    if (isUserScrolling.current) return;
     const timer = setTimeout(() => {
       scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_HEIGHT, animated: false });
-    }, 50);
+    }, 80);
     return () => clearTimeout(timer);
-  }, []);
+  }, [selectedIndex]);
 
   // スクロール中にインデックスが変わるたびに軽いバイブ（カチカチ感）
   const handleScroll = useCallback(
@@ -56,6 +58,7 @@ export function WheelPicker({ values, selectedIndex, onSelect, width = 80 }: Whe
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const y = event.nativeEvent.contentOffset.y;
       const index = Math.max(0, Math.min(values.length - 1, Math.round(y / ITEM_HEIGHT)));
+      isUserScrolling.current = false;
       onSelect(index);
     },
     [values.length, onSelect]
@@ -77,15 +80,24 @@ export function WheelPicker({ values, selectedIndex, onSelect, width = 80 }: Whe
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         snapToInterval={ITEM_HEIGHT}
-        decelerationRate={0.9}
+        decelerationRate="fast"
         bounces={false}
-        scrollEventThrottle={8}
+        scrollEventThrottle={16}
         overScrollMode="never"
         onScroll={handleScroll}
-        onScrollBeginDrag={() => { hasMomentum.current = false; }}
+        onScrollBeginDrag={() => {
+          hasMomentum.current = false;
+          isUserScrolling.current = true;
+          lastHapticIndex.current = -1;
+        }}
         onMomentumScrollBegin={() => { hasMomentum.current = true; }}
-        onScrollEndDrag={(e) => { if (!hasMomentum.current) handleScrollEnd(e); }}
-        onMomentumScrollEnd={(e) => { hasMomentum.current = false; handleScrollEnd(e); }}
+        onScrollEndDrag={(e) => {
+          if (!hasMomentum.current) handleScrollEnd(e);
+        }}
+        onMomentumScrollEnd={(e) => {
+          hasMomentum.current = false;
+          handleScrollEnd(e);
+        }}
         contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * padding }}
       >
         {values.map((value, index) => {
@@ -118,12 +130,13 @@ const styles = StyleSheet.create({
   },
   selector: {
     position: 'absolute',
-    left: 8,
-    right: 8,
+    left: 6,
+    right: 6,
     height: ITEM_HEIGHT,
-    borderTopWidth: 1.5,
-    borderBottomWidth: 1.5,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
     borderColor: COLORS.primary,
+    borderRadius: 4,
     zIndex: 1,
   },
   fadeTop: {
@@ -131,8 +144,9 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: ITEM_HEIGHT * 2,
-    backgroundColor: 'transparent',
+    height: ITEM_HEIGHT,
+    backgroundColor: COLORS.surface,
+    opacity: 0.7,
     zIndex: 2,
     pointerEvents: 'none',
   },
@@ -141,8 +155,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: ITEM_HEIGHT * 2,
-    backgroundColor: 'transparent',
+    height: ITEM_HEIGHT,
+    backgroundColor: COLORS.surface,
+    opacity: 0.7,
     zIndex: 2,
     pointerEvents: 'none',
   },
@@ -154,14 +169,14 @@ const styles = StyleSheet.create({
   itemText: {
     fontSize: 16,
     color: COLORS.textSecondary,
-    opacity: 0.3,
+    opacity: 0.4,
   },
   nearText: {
-    fontSize: 20,
-    opacity: 0.5,
+    fontSize: 18,
+    opacity: 0.6,
   },
   selectedText: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: 'bold',
     color: COLORS.primary,
     opacity: 1,

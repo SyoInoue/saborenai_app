@@ -157,9 +157,11 @@ Deno.serve(async (req: Request) => {
 
     const penaltyText = habit.penalty_text ?? PENALTY_TEXT;
 
+    let tweetError: string | undefined;
+
     if (habit.penalty_type === 'selfie' && habit.selfie_storage_path) {
       // 自撮りモード: Storage から画像を取得して media/upload → tweet
-      tweetId = await postSelfie(
+      const result = await postSelfie(
         supabase,
         supabaseUrl,
         serviceRoleKey,
@@ -167,9 +169,21 @@ Deno.serve(async (req: Request) => {
         habit.selfie_storage_path,
         penaltyText
       );
+      tweetId = result.id;
+      tweetError = result.error;
     } else {
       // テキストモード
-      tweetId = await postTextTweet(freshTokens.access_token, penaltyText);
+      const result = await postTextTweet(freshTokens.access_token, penaltyText);
+      tweetId = result.id;
+      tweetError = result.error;
+    }
+
+    if (!tweetId) {
+      console.error('ツイート投稿失敗:', tweetError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'ツイート投稿失敗', detail: tweetError }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // =====================================================
@@ -211,7 +225,7 @@ Deno.serve(async (req: Request) => {
 /**
  * テキストのみのツイートを投稿する
  */
-async function postTextTweet(accessToken: string, text: string): Promise<string | null> {
+async function postTextTweet(accessToken: string, text: string): Promise<{ id: string | null; error?: string }> {
   const res = await fetch(X_TWEETS_URL, {
     method: 'POST',
     headers: {
@@ -223,12 +237,12 @@ async function postTextTweet(accessToken: string, text: string): Promise<string 
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error('ツイート投稿失敗:', errText);
-    return null;
+    console.error('ツイート投稿失敗 status=' + res.status + ':', errText);
+    return { id: null, error: `status=${res.status} ${errText}` };
   }
 
   const data = await res.json() as { data: { id: string } };
-  return data.data.id;
+  return { id: data.data.id };
 }
 
 /**
@@ -241,7 +255,7 @@ async function postSelfie(
   accessToken: string,
   storagePath: string,
   penaltyText: string
-): Promise<string | null> {
+): Promise<{ id: string | null; error?: string }> {
   // Supabase Storageから画像を取得
   const { data: fileData, error: downloadError } = await supabase.storage
     .from('selfies')
@@ -274,7 +288,6 @@ async function postSelfie(
   const mediaData = await mediaRes.json() as { media_id_string: string };
 
   // 画像付きツイートを投稿
-  const tweetText = penaltyText;
   const res = await fetch(X_TWEETS_URL, {
     method: 'POST',
     headers: {
@@ -282,18 +295,19 @@ async function postSelfie(
       'Authorization': `Bearer ${accessToken}`,
     },
     body: JSON.stringify({
-      text: tweetText,
+      text: penaltyText,
       media: { media_ids: [mediaData.media_id_string] },
     }),
   });
 
   if (!res.ok) {
-    console.error('自撮りツイート投稿失敗');
-    return null;
+    const errText = await res.text();
+    console.error('自撮りツイート投稿失敗:', errText);
+    return { id: null, error: `status=${res.status} ${errText}` };
   }
 
   const data = await res.json() as { data: { id: string } };
-  return data.data.id;
+  return { id: data.data.id };
 }
 
 /**

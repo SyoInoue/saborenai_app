@@ -104,13 +104,19 @@ export function useHabits() {
       return;
     }
 
-    // 今日分のログをUPSERT
-    const logsToUpsert = todayHabits.map((habit) => ({
-      habit_id: habit.id,
-      user_id: user.id,
-      target_date: today,
-      deadline_at: calcDeadlineAt(today, habit.deadline_time),
-    }));
+    // 期限がすでに過ぎている習慣は当日ログを作らない（即座にペナルティ発動するのを防ぐ）
+    const nowMs = Date.now();
+    const logsToUpsert = todayHabits
+      .filter((habit) => {
+        const deadlineMs = new Date(calcDeadlineAt(today, habit.deadline_time)).getTime();
+        return deadlineMs > nowMs;
+      })
+      .map((habit) => ({
+        habit_id: habit.id,
+        user_id: user.id,
+        target_date: today,
+        deadline_at: calcDeadlineAt(today, habit.deadline_time),
+      }));
 
     const { error: upsertError } = await supabase
       .from('habit_logs')

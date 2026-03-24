@@ -12,6 +12,8 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -182,11 +184,14 @@ export default function AddHabit() {
   };
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: COLORS.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
-      automaticallyAdjustKeyboardInsets={true}
     >
       <Text style={styles.title}>習慣を追加</Text>
 
@@ -318,6 +323,7 @@ export default function AddHabit() {
         <Text style={styles.cancelButtonText}>キャンセル</Text>
       </TouchableOpacity>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
