@@ -30,6 +30,7 @@ interface UserRecord {
 }
 
 interface HabitRecord {
+  name: string;
   penalty_type: string;
   penalty_text: string | null;
   selfie_storage_path: string | null;
@@ -95,7 +96,7 @@ Deno.serve(async (req: Request) => {
     if (!logResult.error && logResult.data?.habit_id) {
       const { data: habitData } = await supabase
         .from('habits')
-        .select('penalty_type, penalty_text, selfie_storage_path')
+        .select('name, penalty_type, penalty_text, selfie_storage_path')
         .eq('id', logResult.data.habit_id)
         .single();
       if (habitData) habit = habitData as HabitRecord;
@@ -155,7 +156,14 @@ Deno.serve(async (req: Request) => {
     // =====================================================
     let tweetId: string | null = null;
 
-    const penaltyText = habit.penalty_text ?? PENALTY_TEXT;
+    // 日時を付加してツイートを毎回ユニークにする（X APIの重複投稿エラー回避）
+    const jstDate = new Date().toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    });
+    const baseText = habit.penalty_text ?? PENALTY_TEXT;
+    const penaltyText = `【${habit.name}】${baseText}\n📅 ${jstDate} #サボれない習慣化アプリ`;
 
     let tweetError: string | undefined;
 
