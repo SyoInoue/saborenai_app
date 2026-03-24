@@ -41,10 +41,12 @@ export function HabitCard({ item, onComplete }: Props) {
   const deadlineTs = log?.deadline_at ? new Date(log.deadline_at).getTime() : null;
 
   // ステータスをリアルタイム計算（毎秒更新）
+  // - 期限切れ: 時刻を過ぎた瞬間に自動でoverdue（setIntervalで毎秒再計算）
+  // - ペナルティ執行済み: 実際にツイートが投稿されたとき（penalty_executed_at設定時）
   const status: HabitCardStatus = (() => {
     if (!log) return 'pending';
     if (log.completed_at) return 'completed';
-    if (log.penalty_triggered) return 'penalized';
+    if (log.penalty_executed_at) return 'penalized';
     if (deadlineTs && now > deadlineTs) return 'overdue';
     return 'pending';
   })();

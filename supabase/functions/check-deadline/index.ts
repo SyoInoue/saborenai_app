@@ -69,16 +69,23 @@ Deno.serve(async (req: Request) => {
 
     // 各ログに対してpost-penaltyを呼び出す（受け取ったAuthorizationをそのまま転送）
     const results = await Promise.allSettled(
-      overdueLog.map((log: { id: string; user_id: string }) =>
-        fetch(`${supabaseUrl}/functions/v1/post-penalty`, {
+      overdueLog.map(async (log: { id: string; user_id: string }) => {
+        const res = await fetch(`${supabaseUrl}/functions/v1/post-penalty`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': incomingAuth,
           },
           body: JSON.stringify({ log_id: log.id, user_id: log.user_id }),
-        })
-      )
+        });
+        const body = await res.text();
+        if (!res.ok) {
+          console.error(`post-penalty失敗 log_id=${log.id} status=${res.status}:`, body);
+          throw new Error(`status=${res.status}`);
+        }
+        console.log(`post-penalty成功 log_id=${log.id}:`, body);
+        return body;
+      })
     );
 
     const processed = results.filter((r) => r.status === 'fulfilled').length;

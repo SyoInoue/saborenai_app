@@ -40,7 +40,7 @@ function calcDeadlineAt(targetDate: string, deadlineTime: string): string {
 function calcStatus(log: HabitLog | null, deadlineAt: string): HabitCardStatus {
   if (!log) return 'pending';
   if (log.completed_at) return 'completed';
-  if (log.penalty_triggered) return 'penalized';
+  if (log.penalty_executed_at) return 'penalized';
   if (new Date() > new Date(deadlineAt)) return 'overdue';
   return 'pending';
 }
