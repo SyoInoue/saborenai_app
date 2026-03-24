@@ -156,14 +156,16 @@ Deno.serve(async (req: Request) => {
     // =====================================================
     let tweetId: string | null = null;
 
-    // 日時を付加してツイートを毎回ユニークにする（X APIの重複投稿エラー回避）
-    const jstDate = new Date().toLocaleString('ja-JP', {
+    // 習慣名・日時（秒単位）を付加してツイートを毎回ユニークにする（X API重複エラー回避）
+    const now = new Date();
+    const jstDate = now.toLocaleString('ja-JP', {
       timeZone: 'Asia/Tokyo',
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit',
+      second: '2-digit',
     });
     const baseText = habit.penalty_text ?? PENALTY_TEXT;
-    const penaltyText = `【${habit.name}】${baseText}\n📅 ${jstDate} #サボれない習慣化アプリ`;
+    const penaltyText = `【${habit.name}】\n${baseText}\n📅 ${jstDate}`;
 
     let tweetError: string | undefined;
 
