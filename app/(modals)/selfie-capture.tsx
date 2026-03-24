@@ -105,8 +105,8 @@ export default function SelfieCapture() {
       <View style={styles.container}>
         <Image source={{ uri: capturedUri }} style={styles.preview} />
         <View style={styles.previewActions}>
-          <Text style={styles.previewTitle}>この写真を使いますか？</Text>
-          <Text style={styles.previewSubtitle}>ペナルティ発動時にXに投稿されます</Text>
+          <Text style={styles.previewTitle}>この顔でいいですか？😅</Text>
+          <Text style={styles.previewSubtitle}>サボった時にXでこの顔が晒されます</Text>
           <TouchableOpacity
             style={[styles.useButton, isUploading && styles.buttonDisabled]}
             onPress={uploadSelfie}
@@ -134,7 +134,7 @@ export default function SelfieCapture() {
     <View style={styles.container}>
       <CameraView ref={cameraRef} style={styles.camera} facing={'front' as CameraType}>
         <View style={styles.cameraOverlay}>
-          <Text style={styles.cameraInstruction}>インカメラで自撮りを撮影してください</Text>
+          <Text style={styles.cameraInstruction}>😱 サボった時のダメな顔を撮っておこう</Text>
           <View style={styles.captureArea}>
             <View style={styles.captureFrame} />
           </View>

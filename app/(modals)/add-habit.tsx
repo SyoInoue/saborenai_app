@@ -21,7 +21,7 @@ import { useHabits } from '@/hooks/useHabits';
 import { usePurchase } from '@/providers/PurchaseProvider';
 import { tempStore } from '@/lib/tempStore';
 import { COLORS, SPACING, HABIT_LIMIT_FREE, HABIT_LIMIT_PRO, PENALTY_TWEET_TEXT } from '@/constants/config';
-import type { WeekDay, PenaltyType } from '@/types';
+import type { WeekDay } from '@/types';
 
 const WEEKDAYS: { label: string; value: WeekDay }[] = [
   { label: '日', value: 0 },
@@ -49,7 +49,6 @@ export default function AddHabit() {
   const [name, setName] = useState('');
   const [deadlineDate, setDeadlineDate] = useState(defaultDeadlineDate);
   const [repeatDays, setRepeatDays] = useState<WeekDay[]>([1, 2, 3, 4, 5]);
-  const [penaltyType, setPenaltyType] = useState<PenaltyType>('text');
   const [penaltyText, setPenaltyText] = useState(PENALTY_TWEET_TEXT);
   const [selfieStoragePath, setSelfieStoragePath] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
@@ -165,11 +164,6 @@ export default function AddHabit() {
       Alert.alert('入力エラー', '繰り返す曜日を1日以上選択してください。');
       return;
     }
-    if (penaltyType === 'selfie' && !selfieStoragePath) {
-      Alert.alert('入力エラー', '自撮り写真を撮影してください。');
-      return;
-    }
-
     setIsSaving(true);
     try {
       const hour = String(deadlineDate.getHours()).padStart(2, '0');
@@ -178,7 +172,8 @@ export default function AddHabit() {
         name: name.trim(),
         deadline_time: `${hour}:${minute}`,
         repeat_days: repeatDays,
-        penalty_type: penaltyType,
+        // 写真があればselfie、なければtext
+        penalty_type: selfieStoragePath ? 'selfie' : 'text',
         penalty_text: penaltyText.trim() || null,
         selfie_storage_path: selfieStoragePath,
       });
@@ -254,57 +249,39 @@ export default function AddHabit() {
 
       {/* ペナルティ設定 */}
       <View style={styles.section}>
-        <Text style={styles.label}>ペナルティ設定</Text>
-        <Text style={styles.labelHint}>期限切れ時にXへ投稿される内容</Text>
+        <Text style={styles.label}>ペナルティ投稿内容</Text>
+        <Text style={styles.labelHint}>サボったらこの内容がXに自動投稿されます</Text>
 
-        {/* タイプ選択 */}
-        <View style={styles.penaltyTypeRow}>
-          <TouchableOpacity
-            style={[styles.penaltyTypeBtn, penaltyType === 'text' && styles.penaltyTypeBtnSelected]}
-            onPress={() => setPenaltyType('text')}
-          >
-            <Text style={[styles.penaltyTypeBtnText, penaltyType === 'text' && styles.penaltyTypeBtnTextSelected]}>
-              📝 テキスト
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.penaltyTypeBtn, penaltyType === 'selfie' && styles.penaltyTypeBtnSelected]}
-            onPress={() => setPenaltyType('selfie')}
-          >
-            <Text style={[styles.penaltyTypeBtnText, penaltyType === 'selfie' && styles.penaltyTypeBtnTextSelected]}>
-              📸 自撮り
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* 投稿テキスト（必須） */}
+        <TextInput
+          style={[styles.input, styles.penaltyTextInput]}
+          value={penaltyText}
+          onChangeText={setPenaltyText}
+          multiline
+          numberOfLines={3}
+          placeholder="ペナルティとして投稿するテキスト"
+          placeholderTextColor={COLORS.textSecondary}
+          maxLength={200}
+          onFocus={() => {
+            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+          }}
+        />
 
-        {/* テキストモード: 投稿内容を編集 */}
-        {penaltyType === 'text' && (
-          <TextInput
-            style={[styles.input, styles.penaltyTextInput]}
-            value={penaltyText}
-            onChangeText={setPenaltyText}
-            multiline
-            numberOfLines={3}
-            placeholder="ペナルティとして投稿するテキスト"
-            placeholderTextColor={COLORS.textSecondary}
-            maxLength={200}
-            onFocus={() => {
-              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
-            }}
-          />
-        )}
-
-        {/* 自撮りモード */}
-        {penaltyType === 'selfie' && (
+        {/* 自撮り写真（任意） */}
+        <View style={styles.selfieSection}>
+          <Text style={styles.selfieSectionLabel}>😱 サボった時の顔を登録する（任意）</Text>
+          <Text style={styles.selfieSectionHint}>
+            投稿時にテキストと一緒に晒されます
+          </Text>
           <TouchableOpacity
             style={[styles.selfieButton, selfieStoragePath && styles.selfieButtonDone]}
             onPress={() => router.push('/(modals)/selfie-capture?mode=habit')}
           >
             <Text style={[styles.selfieButtonText, selfieStoragePath && styles.selfieButtonTextDone]}>
-              {selfieStoragePath ? '✓ 撮影済み（タップして変更）' : '📸 自撮りを撮影する'}
+              {selfieStoragePath ? '✅ 撮影済み（タップして撮り直す）' : '📸 インカメで撮影する'}
             </Text>
           </TouchableOpacity>
-        )}
+        </View>
       </View>
 
       {/* 保存ボタン */}
@@ -366,18 +343,12 @@ const styles = StyleSheet.create({
   dayTextSelected: { color: '#FFFFFF' },
 
   // ペナルティ設定
-  penaltyTypeRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md },
-  penaltyTypeBtn: {
-    flex: 1, paddingVertical: SPACING.sm, borderRadius: 10,
-    alignItems: 'center', borderWidth: 2, borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-  },
-  penaltyTypeBtnSelected: { borderColor: COLORS.primary, backgroundColor: '#FFF5F5' },
-  penaltyTypeBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.textSecondary },
-  penaltyTypeBtnTextSelected: { color: COLORS.primary },
   penaltyTextInput: {
-    height: 80, textAlignVertical: 'top', paddingTop: SPACING.sm,
+    height: 80, textAlignVertical: 'top', paddingTop: SPACING.sm, marginBottom: SPACING.md,
   },
+  selfieSection: { marginTop: SPACING.sm },
+  selfieSectionLabel: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 2 },
+  selfieSectionHint: { fontSize: 12, color: COLORS.textSecondary, marginBottom: SPACING.sm },
   selfieButton: {
     backgroundColor: COLORS.surface, borderRadius: 10, paddingVertical: SPACING.md,
     alignItems: 'center', borderWidth: 2, borderColor: COLORS.border, borderStyle: 'dashed',

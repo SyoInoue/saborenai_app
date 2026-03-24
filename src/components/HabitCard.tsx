@@ -101,11 +101,11 @@ export function HabitCard({ item, onComplete }: Props) {
         <Text style={[styles.deadline, isOverdue && styles.deadlineOverdue]}>
           期限: {habit.deadline_time.slice(0, 5)}
         </Text>
-        <View style={styles.penaltyChip}>
-          <Text style={styles.penaltyChipText}>
-            {habit.penalty_type === 'selfie' ? '📸 自撮り' : '📝 テキスト'}
-          </Text>
-        </View>
+        {habit.selfie_storage_path && (
+          <View style={styles.penaltyChip}>
+            <Text style={styles.penaltyChipText}>📸 顔写真あり</Text>
+          </View>
+        )}
       </View>
 
       {/* カウントダウン（pending かつ期限あり） */}
