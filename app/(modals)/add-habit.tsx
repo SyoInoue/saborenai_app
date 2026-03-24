@@ -4,7 +4,7 @@
  * 無料ユーザーは1個まで制限
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,6 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Platform,
-  Keyboard,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -35,10 +33,11 @@ const WEEKDAYS: { label: string; value: WeekDay }[] = [
   { label: '土', value: 6 },
 ];
 
-/** 期限のデフォルト値（21:00）を持つDateを生成 */
+/** 現在時刻を5分単位に切り上げたDateを生成 */
 function defaultDeadlineDate(): Date {
   const d = new Date();
-  d.setHours(21, 0, 0, 0);
+  const minutes = Math.ceil(d.getMinutes() / 5) * 5;
+  d.setMinutes(minutes, 0, 0);
   return d;
 }
 
@@ -55,24 +54,9 @@ export default function AddHabit() {
   const [selfieStoragePath, setSelfieStoragePath] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
   const [isSaving, setIsSaving] = useState(false);
-  const [keyboardPadding, setKeyboardPadding] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
 
   const habitLimit = isPro ? HABIT_LIMIT_PRO : HABIT_LIMIT_FREE;
-
-  // キーボード表示時にScrollViewを押し上げる
-  useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    const show = Keyboard.addListener('keyboardWillShow', (e) => {
-      setKeyboardPadding(e.endCoordinates.height);
-    });
-    const hide = Keyboard.addListener('keyboardWillHide', () => {
-      setKeyboardPadding(0);
-    });
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
 
   // selfie-capture から戻ってきた時に tempStore から自撮りパスを取得
   useFocusEffect(
@@ -209,10 +193,12 @@ export default function AddHabit() {
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingBottom: keyboardPadding + 40 }]}
+      contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
+      automaticallyAdjustKeyboardInsets={true}
     >
       <Text style={styles.title}>習慣を追加</Text>
 
@@ -302,6 +288,9 @@ export default function AddHabit() {
             placeholder="ペナルティとして投稿するテキスト"
             placeholderTextColor={COLORS.textSecondary}
             maxLength={200}
+            onFocus={() => {
+              setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+            }}
           />
         )}
 
