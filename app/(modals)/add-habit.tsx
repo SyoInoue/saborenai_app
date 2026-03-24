@@ -1,10 +1,10 @@
 /**
  * 習慣追加モーダル
- * 習慣名・期限時刻（トグル式）・曜日・ペナルティ設定を入力して習慣を追加する
+ * 習慣名・期限時刻（ネイティブドラムロール）・曜日・ペナルティ設定を入力して習慣を追加する
  * 無料ユーザーは1個まで制限
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,21 +12,18 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
+  Keyboard,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useHabits } from '@/hooks/useHabits';
 import { usePurchase } from '@/providers/PurchaseProvider';
 import { tempStore } from '@/lib/tempStore';
-import { WheelPicker } from '@/components/WheelPicker';
 import { COLORS, SPACING, HABIT_LIMIT_FREE, HABIT_LIMIT_PRO, PENALTY_TWEET_TEXT } from '@/constants/config';
 import type { WeekDay, PenaltyType } from '@/types';
-
-const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
 
 const WEEKDAYS: { label: string; value: WeekDay }[] = [
   { label: '日', value: 0 },
@@ -38,22 +35,44 @@ const WEEKDAYS: { label: string; value: WeekDay }[] = [
   { label: '土', value: 6 },
 ];
 
+/** 期限のデフォルト値（21:00）を持つDateを生成 */
+function defaultDeadlineDate(): Date {
+  const d = new Date();
+  d.setHours(21, 0, 0, 0);
+  return d;
+}
+
 export default function AddHabit() {
   const router = useRouter();
   const { habits, addHabit, isLoading: habitsLoading } = useHabits();
   const { isPro, purchasePro, isLoading: isPurchaseLoading } = usePurchase();
 
   const [name, setName] = useState('');
-  const [deadlineHour, setDeadlineHour] = useState(21);
-  const [deadlineMinuteIndex, setDeadlineMinuteIndex] = useState(0);
+  const [deadlineDate, setDeadlineDate] = useState(defaultDeadlineDate);
   const [repeatDays, setRepeatDays] = useState<WeekDay[]>([1, 2, 3, 4, 5]);
   const [penaltyType, setPenaltyType] = useState<PenaltyType>('text');
   const [penaltyText, setPenaltyText] = useState(PENALTY_TWEET_TEXT);
   const [selfieStoragePath, setSelfieStoragePath] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
   const [isSaving, setIsSaving] = useState(false);
+  const [keyboardPadding, setKeyboardPadding] = useState(0);
 
   const habitLimit = isPro ? HABIT_LIMIT_PRO : HABIT_LIMIT_FREE;
+
+  // キーボード表示時にScrollViewを押し上げる
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    const show = Keyboard.addListener('keyboardWillShow', (e) => {
+      setKeyboardPadding(e.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardPadding(0);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   // selfie-capture から戻ってきた時に tempStore から自撮りパスを取得
   useFocusEffect(
@@ -149,6 +168,10 @@ export default function AddHabit() {
     );
   };
 
+  const handleTimeChange = (_: DateTimePickerEvent, date?: Date) => {
+    if (date) setDeadlineDate(date);
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert('入力エラー', '習慣名を入力してください。');
@@ -165,10 +188,11 @@ export default function AddHabit() {
 
     setIsSaving(true);
     try {
-      const deadlineMinute = deadlineMinuteIndex * 5;
+      const hour = String(deadlineDate.getHours()).padStart(2, '0');
+      const minute = String(deadlineDate.getMinutes()).padStart(2, '0');
       await addHabit({
         name: name.trim(),
-        deadline_time: `${String(deadlineHour).padStart(2, '0')}:${String(deadlineMinute).padStart(2, '0')}`,
+        deadline_time: `${hour}:${minute}`,
         repeat_days: repeatDays,
         penalty_type: penaltyType,
         penalty_text: penaltyText.trim() || null,
@@ -184,14 +208,11 @@ export default function AddHabit() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: COLORS.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: keyboardPadding + 40 }]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
     >
       <Text style={styles.title}>習慣を追加</Text>
 
@@ -209,30 +230,21 @@ export default function AddHabit() {
         />
       </View>
 
-      {/* 期限時刻（スクロールホイール） */}
+      {/* 期限時刻（ネイティブドラムロール） */}
       <View style={styles.section}>
         <Text style={styles.label}>期限時刻</Text>
         <Text style={styles.labelHint}>この時刻までに完了しないとペナルティが発動します</Text>
         <View style={styles.timePickerContainer}>
-          <View style={styles.timePickerColumn}>
-            <Text style={styles.timePickerLabel}>時</Text>
-            <WheelPicker
-              values={HOURS}
-              selectedIndex={deadlineHour}
-              onSelect={setDeadlineHour}
-              width={90}
-            />
-          </View>
-          <Text style={styles.timeSeparator}>:</Text>
-          <View style={styles.timePickerColumn}>
-            <Text style={styles.timePickerLabel}>分</Text>
-            <WheelPicker
-              values={MINUTES}
-              selectedIndex={deadlineMinuteIndex}
-              onSelect={setDeadlineMinuteIndex}
-              width={90}
-            />
-          </View>
+          <DateTimePicker
+            value={deadlineDate}
+            mode="time"
+            display="spinner"
+            onChange={handleTimeChange}
+            minuteInterval={5}
+            locale="ja_JP"
+            style={styles.timePicker}
+            textColor={COLORS.text}
+          />
         </View>
       </View>
 
@@ -323,13 +335,12 @@ export default function AddHabit() {
         <Text style={styles.cancelButtonText}>キャンセル</Text>
       </TouchableOpacity>
     </ScrollView>
-    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  content: { padding: SPACING.xl, paddingTop: 60, paddingBottom: 40 },
+  content: { padding: SPACING.xl, paddingTop: 60 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
   title: { fontSize: 28, fontWeight: 'bold', color: COLORS.text, marginBottom: SPACING.xl },
   section: { marginBottom: SPACING.lg },
@@ -341,15 +352,19 @@ const styles = StyleSheet.create({
     fontSize: 16, color: COLORS.text, borderWidth: 1, borderColor: COLORS.border,
   },
 
-  // 時間ピッカー
+  // 時間ピッカー（ネイティブドラムロール）
   timePickerContainer: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: COLORS.surface, borderRadius: 16, paddingVertical: SPACING.sm,
-    borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    alignItems: 'center',
   },
-  timePickerColumn: { alignItems: 'center', gap: SPACING.xs },
-  timePickerLabel: { fontSize: 12, color: COLORS.textSecondary, fontWeight: '600' },
-  timeSeparator: { fontSize: 36, fontWeight: 'bold', color: COLORS.text, marginTop: 20, marginHorizontal: 4 },
+  timePicker: {
+    width: '100%',
+    height: 150,
+  },
 
   // 曜日選択
   daysContainer: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
