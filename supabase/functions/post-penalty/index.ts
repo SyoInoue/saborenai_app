@@ -291,8 +291,9 @@ async function postSelfie(
 
   if (!mediaRes.ok) {
     const errText = await mediaRes.text();
-    console.error('メディアアップロード失敗:', errText);
-    return postTextTweet(accessToken, PENALTY_TEXT);
+    console.error('メディアアップロード失敗（テキストのみで投稿）:', errText);
+    // フォールバック: タイムスタンプ入りのpenaltyTextで投稿（重複エラー防止）
+    return postTextTweet(accessToken, penaltyText);
   }
 
   const mediaData = await mediaRes.json() as { media_id_string: string };
