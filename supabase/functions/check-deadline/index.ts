@@ -22,6 +22,9 @@ Deno.serve(async (req: Request) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
   // SUPABASE_SERVICE_ROLE_KEY は Supabase が自動提供する環境変数
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? '';
+  // pg_cronから受け取ったAuthorizationヘッダーをそのままpost-penaltyへ転送する
+  // （SUPABASE_SERVICE_ROLE_KEYの形式がJWTとして認識されない場合への対策）
+  const incomingAuth = req.headers.get('Authorization') ?? `Bearer ${serviceRoleKey}`;
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
@@ -64,14 +67,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 各ログに対してpost-penaltyを呼び出す
+    // 各ログに対してpost-penaltyを呼び出す（受け取ったAuthorizationをそのまま転送）
     const results = await Promise.allSettled(
       overdueLog.map((log: { id: string; user_id: string }) =>
         fetch(`${supabaseUrl}/functions/v1/post-penalty`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Authorization': incomingAuth,
           },
           body: JSON.stringify({ log_id: log.id, user_id: log.user_id }),
         })
