@@ -11,16 +11,17 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+// CORS はブラウザからの直接呼び出しには不要（check-deadlineからのサーバー間通信のみ）
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('SUPABASE_URL') ?? '',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 const X_TOKEN_URL = 'https://api.twitter.com/2/oauth2/token';
 const X_TWEETS_URL = 'https://api.twitter.com/2/tweets';
-const X_MEDIA_UPLOAD_URL = 'https://upload.twitter.com/1.1/media/upload.json';
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
-const PENALTY_TEXT = '私はサボりました。だらしのない人間です。 #サボれない習慣化アプリ';
+const PENALTY_TEXT = '私はサボりました。だらしのない人間です。';
+const HASHTAG = '#サボれない習慣化アプリ #YARANEVA';
 
 interface UserRecord {
   x_access_token: string;
@@ -31,9 +32,12 @@ interface UserRecord {
 
 interface HabitRecord {
   name: string;
-  penalty_type: string;
   penalty_text: string | null;
-  selfie_storage_path: string | null;
+}
+
+interface LogRecord {
+  user_id: string;
+  habit_id: string;
 }
 
 interface RefreshedTokens {
@@ -48,7 +52,6 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  // SUPABASE_SERVICE_ROLE_KEY は Supabase が自動提供する環境変数
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? '';
   const clientId = Deno.env.get('X_CLIENT_ID') ?? '';
   const clientSecret = Deno.env.get('X_CLIENT_SECRET') ?? '';
@@ -56,28 +59,49 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    const { log_id, user_id } = await req.json() as { log_id: string; user_id: string };
+    // log_id のみ受け取る（user_id はDBから導出して信頼する）
+    const { log_id } = await req.json() as { log_id: string };
 
-    if (!log_id || !user_id) {
+    if (!log_id) {
       return new Response(
-        JSON.stringify({ error: 'log_id と user_id が必要です' }),
+        JSON.stringify({ error: 'log_id が必要です' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // =====================================================
-    // 1. ユーザー情報・習慣のペナルティ設定取得
+    // 1. log_id から user_id・habit_id を導出（リクエスト本文を信頼しない）
     // =====================================================
-    const [userResult, logResult] = await Promise.all([
+    const { data: logData, error: logError } = await supabase
+      .from('habit_logs')
+      .select('user_id, habit_id')
+      .eq('id', log_id)
+      .single();
+
+    if (logError || !logData) {
+      console.error('ログ取得エラー:', logError);
+      return new Response(
+        JSON.stringify({ error: 'ログが見つかりません' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const log = logData as LogRecord;
+    const user_id = log.user_id; // DBから取得した値を使用（リクエスト本文を信頼しない）
+
+    // =====================================================
+    // 2. ユーザー情報・習慣のペナルティ設定取得
+    // =====================================================
+    const [userResult, habitResult] = await Promise.all([
       supabase
         .from('users')
         .select('x_access_token, x_refresh_token, x_token_expires_at, expo_push_token')
         .eq('id', user_id)
         .single(),
       supabase
-        .from('habit_logs')
-        .select('habit_id')
-        .eq('id', log_id)
+        .from('habits')
+        .select('name, penalty_text')
+        .eq('id', log.habit_id)
         .single(),
     ]);
 
@@ -90,20 +114,12 @@ Deno.serve(async (req: Request) => {
     }
 
     const user = userResult.data as UserRecord;
-
-    // 習慣のペナルティ設定取得
-    let habit: HabitRecord = { penalty_type: 'text', penalty_text: null, selfie_storage_path: null };
-    if (!logResult.error && logResult.data?.habit_id) {
-      const { data: habitData } = await supabase
-        .from('habits')
-        .select('name, penalty_type, penalty_text, selfie_storage_path')
-        .eq('id', logResult.data.habit_id)
-        .single();
-      if (habitData) habit = habitData as HabitRecord;
-    }
+    const habit: HabitRecord = habitResult.data
+      ? (habitResult.data as HabitRecord)
+      : { name: '', penalty_text: null };
 
     // =====================================================
-    // 2. アクセストークンのリフレッシュ
+    // 3. アクセストークンのリフレッシュ
     // =====================================================
     const credentials = btoa(`${clientId}:${clientSecret}`);
     const refreshBody = new URLSearchParams({
@@ -152,10 +168,8 @@ Deno.serve(async (req: Request) => {
       .eq('id', user_id);
 
     // =====================================================
-    // 3. ツイート投稿
+    // 4. ツイート投稿
     // =====================================================
-    let tweetId: string | null = null;
-
     // 習慣名・日時（秒単位）を付加してツイートを毎回ユニークにする（X API重複エラー回避）
     const now = new Date();
     const jstDate = now.toLocaleString('ja-JP', {
@@ -165,28 +179,11 @@ Deno.serve(async (req: Request) => {
       second: '2-digit',
     });
     const baseText = habit.penalty_text ?? PENALTY_TEXT;
-    const penaltyText = `【${habit.name}】\n${baseText}\n📅 ${jstDate}`;
+    const penaltyText = `【${habit.name}】\n${baseText}\n\n${HASHTAG}\n📅 ${jstDate}`;
 
-    let tweetError: string | undefined;
-
-    if (habit.penalty_type === 'selfie' && habit.selfie_storage_path) {
-      // 自撮りモード: Storage から画像を取得して media/upload → tweet
-      const result = await postSelfie(
-        supabase,
-        supabaseUrl,
-        serviceRoleKey,
-        freshTokens.access_token,
-        habit.selfie_storage_path,
-        penaltyText
-      );
-      tweetId = result.id;
-      tweetError = result.error;
-    } else {
-      // テキストモード
-      const result = await postTextTweet(freshTokens.access_token, penaltyText);
-      tweetId = result.id;
-      tweetError = result.error;
-    }
+    const result = await postTextTweet(freshTokens.access_token, penaltyText);
+    const tweetId = result.id;
+    const tweetError = result.error;
 
     if (!tweetId) {
       console.error('ツイート投稿失敗:', tweetError);
@@ -197,7 +194,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // =====================================================
-    // 4. DBに投稿結果を記録
+    // 5. DBに投稿結果を記録
     // =====================================================
     await supabase
       .from('habit_logs')
@@ -208,7 +205,7 @@ Deno.serve(async (req: Request) => {
       .eq('id', log_id);
 
     // =====================================================
-    // 5. プッシュ通知
+    // 6. プッシュ通知
     // =====================================================
     if (user.expo_push_token) {
       await sendPushNotification(
@@ -248,72 +245,6 @@ async function postTextTweet(accessToken: string, text: string): Promise<{ id: s
   if (!res.ok) {
     const errText = await res.text();
     console.error('ツイート投稿失敗 status=' + res.status + ':', errText);
-    return { id: null, error: `status=${res.status} ${errText}` };
-  }
-
-  const data = await res.json() as { data: { id: string } };
-  return { id: data.data.id };
-}
-
-/**
- * 自撮り写真付きのツイートを投稿する
- */
-async function postSelfie(
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  accessToken: string,
-  storagePath: string,
-  penaltyText: string
-): Promise<{ id: string | null; error?: string }> {
-  // Supabase Storageから画像を取得
-  const { data: fileData, error: downloadError } = await supabase.storage
-    .from('selfies')
-    .download(storagePath);
-
-  if (downloadError || !fileData) {
-    console.error('自撮り画像取得エラー:', downloadError);
-    // 自撮り失敗時はテキストのみで投稿
-    return postTextTweet(accessToken, penaltyText);
-  }
-
-  // X media/upload に画像をアップロード (v1.1)
-  const formData = new FormData();
-  formData.append('media', fileData, 'penalty.jpg');
-
-  const mediaRes = await fetch(X_MEDIA_UPLOAD_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-    },
-    body: formData,
-  });
-
-  if (!mediaRes.ok) {
-    const errText = await mediaRes.text();
-    console.error('メディアアップロード失敗（テキストのみで投稿）:', errText);
-    // フォールバック: タイムスタンプ入りのpenaltyTextで投稿（重複エラー防止）
-    return postTextTweet(accessToken, penaltyText);
-  }
-
-  const mediaData = await mediaRes.json() as { media_id_string: string };
-
-  // 画像付きツイートを投稿
-  const res = await fetch(X_TWEETS_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      text: penaltyText,
-      media: { media_ids: [mediaData.media_id_string] },
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error('自撮りツイート投稿失敗:', errText);
     return { id: null, error: `status=${res.status} ${errText}` };
   }
 

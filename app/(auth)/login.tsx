@@ -1,6 +1,5 @@
 /**
  * X OAuth ログイン画面
- * expo-web-browserでX認証を実行し、PKCE フローでトークンを取得する
  */
 
 import { useState } from 'react';
@@ -11,9 +10,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { startXOAuthFlow } from '@/lib/x-api';
 import { COLORS, SPACING } from '@/constants/config';
@@ -22,53 +23,31 @@ export default function Login() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
-  /**
-   * X OAuth ログインを実行する
-   * コードをEdge Functionに送り、トークン交換とユーザー情報保存を行う
-   */
   const handleXLogin = async () => {
     setIsLoading(true);
     try {
       const result = await startXOAuthFlow();
-      if (!result) {
-        return;
-      }
+      if (!result) return;
 
       const { code, codeVerifier } = result;
 
-      // Edge Function にコードを送りトークン交換・ユーザー情報保存を依頼
       const { data, error } = await supabase.functions.invoke('x-oauth-callback', {
         body: { code, codeVerifier },
       });
 
       if (error) {
-        console.error('Edge Functionエラー:', JSON.stringify(error));
-        const context = error.context as { text?: () => Promise<string> } | undefined;
-        if (context?.text) {
-          const body = await context.text();
-          console.error('Edge Functionレスポンスボディ:', body);
-        }
         throw new Error(error.message);
       }
 
-      // setSession は React Native で AsyncStorage ロック競合が起きるため
-      // email + ワンタイムパスワードを受け取り signInWithPassword で直接ログイン
       const { email, password, user_id } = data as {
         email: string;
         password: string;
         user_id: string;
       };
 
-      const { error: sessionError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error: sessionError } = await supabase.auth.signInWithPassword({ email, password });
+      if (sessionError) throw new Error(sessionError.message);
 
-      if (sessionError) {
-        throw new Error(sessionError.message);
-      }
-
-      // onboarding 状態に応じてナビゲーション
       const { data: userData } = await supabase
         .from('users')
         .select('onboarding_completed')
@@ -80,8 +59,7 @@ export default function Login() {
       } else {
         router.replace('/(modals)/penalty-setup');
       }
-    } catch (error) {
-      console.error('X OAuthエラー:', error);
+    } catch {
       Alert.alert(
         'ログインエラー',
         'Xアカウントでのログインに失敗しました。もう一度お試しください。',
@@ -94,20 +72,29 @@ export default function Login() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[COLORS.primary, '#FF8E53']}
-        style={styles.header}
-      >
-        <Text style={styles.emoji}>🔥</Text>
-        <Text style={styles.appName}>サボれない</Text>
-        <Text style={styles.tagline}>習慣化アプリ</Text>
-      </LinearGradient>
+      {/* 背景ロゴ */}
+      <Image
+        source={require('../../assets/yaraneva_bg_overlay.png')}
+        style={styles.bgOverlay}
+        resizeMode="cover"
+      />
 
-      <View style={styles.body}>
-        <Text style={styles.title}>Xアカウントで{'\n'}ログイン</Text>
-        <Text style={styles.subtitle}>
-          ペナルティ投稿のためにXアカウントとの連携が必要です
-        </Text>
+      {/* ロゴエリア */}
+      <View style={styles.heroArea}>
+        <Text style={styles.appNameSub}>サボれない習慣化アプリ</Text>
+        <Text style={styles.appName}>YARANEVA</Text>
+        <View style={styles.taglineRow}>
+          <View style={styles.taglineLine} />
+          <Text style={styles.tagline}>サボったら自動投稿される</Text>
+          <View style={styles.taglineLine} />
+        </View>
+      </View>
+
+      {/* ボトムエリア */}
+      <View style={styles.bottom}>
+        <View style={styles.divider} />
+
+        <Text style={styles.loginLabel}>Xアカウントで連携してログイン</Text>
 
         <TouchableOpacity
           style={[styles.xButton, isLoading && styles.buttonDisabled]}
@@ -119,13 +106,24 @@ export default function Login() {
           ) : (
             <>
               <Text style={styles.xIcon}>𝕏</Text>
-              <Text style={styles.xButtonText}>Xでログイン</Text>
+              <Text style={styles.xButtonText}>X でログイン</Text>
+              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
             </>
           )}
         </TouchableOpacity>
 
         <Text style={styles.notice}>
-          ※ ログインすることで利用規約とプライバシーポリシーに同意したものとみなされます
+          ログインすることで{' '}
+          <Text
+            style={styles.noticeLink}
+            onPress={() => Linking.openURL('https://syoinoue.github.io/yaraneva-legal/terms-of-service.html')}
+          >利用規約</Text>
+          {' '}と{' '}
+          <Text
+            style={styles.noticeLink}
+            onPress={() => Linking.openURL('https://syoinoue.github.io/yaraneva-legal/privacy-policy.html')}
+          >プライバシーポリシー</Text>
+          {' '}に同意したものとみなされます
         </Text>
       </View>
     </View>
@@ -137,78 +135,103 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  header: {
-    flex: 0.45,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+  bgOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.38,
   },
-  emoji: {
-    fontSize: 64,
-    marginBottom: SPACING.md,
+  heroArea: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xl,
+  },
+  appNameSub: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+    marginBottom: SPACING.sm,
   },
   appName: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+    fontSize: 56,
+    fontWeight: '900',
+    color: COLORS.text,
+    letterSpacing: -1,
+    lineHeight: 60,
+    marginBottom: SPACING.lg,
+  },
+  taglineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  taglineLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
   },
   tagline: {
-    fontSize: 20,
-    color: '#FFFFFFCC',
-    marginTop: SPACING.xs,
-  },
-  body: {
-    flex: 0.55,
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.xl,
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: SPACING.md,
-    lineHeight: 36,
-  },
-  subtitle: {
-    fontSize: 15,
+    fontSize: 12,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
+    fontWeight: '600',
+  },
+  bottom: {
+    padding: SPACING.xl,
+    paddingBottom: 48,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
     marginBottom: SPACING.xl,
+  },
+  loginLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+    marginBottom: SPACING.md,
+    letterSpacing: 0.5,
   },
   xButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000000',
-    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.xl,
-    width: '100%',
-    gap: SPACING.sm,
     minHeight: 52,
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   xIcon: {
-    fontSize: 20,
+    fontSize: 18,
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontWeight: '900',
   },
   xButtonText: {
     color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 1,
+    flex: 1,
   },
   notice: {
-    marginTop: SPACING.lg,
-    fontSize: 12,
-    color: COLORS.textSecondary,
+    fontSize: 11,
+    color: COLORS.textMuted,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 16,
+  },
+  noticeLink: {
+    color: COLORS.textSecondary,
+    textDecorationLine: 'underline',
   },
 });

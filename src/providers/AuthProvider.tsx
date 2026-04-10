@@ -55,14 +55,19 @@ export function AuthProvider({ children }: Props) {
    * Supabaseセッションからユーザープロファイルを取得する
    */
   const fetchUser = async (userId: string): Promise<void> => {
+    // x_access_token / x_refresh_token はサーバー側（Edge Function）のみが使用する機密情報。
+    // クライアントには返さない（万が一のリーク・メモリダンプ対策）
     const { data, error } = await supabase
       .from('users')
-      .select('*')
+      .select(
+        'id, x_user_id, x_username, x_display_name, x_avatar_url, ' +
+        'penalty_type, is_pro, pro_expires_at, ' +
+        'expo_push_token, onboarding_completed, created_at, updated_at'
+      )
       .eq('id', userId)
       .single();
 
     if (error) {
-      console.error('ユーザー情報取得エラー:', error);
       // ユーザーがDBに存在しない場合は古いセッションを破棄してサインアウト
       if (error.code === 'PGRST116') {
         await supabase.auth.signOut();
@@ -90,7 +95,7 @@ export function AuthProvider({ children }: Props) {
   const signOut = async (): Promise<void> => {
     const { error } = await supabase.auth.signOut();
     if (error) {
-      console.error('サインアウトエラー:', error);
+      // sign out error is non-fatal; clear local user state regardless
     }
     dispatch({ type: 'SET_USER', payload: null });
   };

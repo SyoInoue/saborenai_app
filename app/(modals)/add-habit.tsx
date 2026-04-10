@@ -1,10 +1,8 @@
 /**
  * 習慣追加モーダル
- * 習慣名・期限時刻（ネイティブドラムロール）・曜日・ペナルティ設定を入力して習慣を追加する
- * 無料ユーザーは1個まで制限
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,10 +14,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { PageHeader } from '@/components/PageHeader';
+import { Ionicons } from '@expo/vector-icons';
 import { useHabits } from '@/hooks/useHabits';
 import { usePurchase } from '@/providers/PurchaseProvider';
-import { tempStore } from '@/lib/tempStore';
+import { setPendingToast, setPendingCreation } from '@/lib/pendingToast';
 import { COLORS, SPACING, HABIT_LIMIT_FREE, HABIT_LIMIT_PRO, PENALTY_TWEET_TEXT } from '@/constants/config';
 import type { WeekDay } from '@/types';
 
@@ -33,9 +33,17 @@ const WEEKDAYS: { label: string; value: WeekDay }[] = [
   { label: '土', value: 6 },
 ];
 
-/** 現在時刻を5分単位に切り上げたDateを生成 */
+function countXChars(text: string): number {
+  let count = 0;
+  for (const char of text) {
+    count += (char.codePointAt(0) ?? 0) > 0x7e ? 2 : 1;
+  }
+  return count;
+}
+
 function defaultDeadlineDate(): Date {
   const d = new Date();
+  d.setMinutes(d.getMinutes() + 5, 0, 0);
   const minutes = Math.ceil(d.getMinutes() / 5) * 5;
   d.setMinutes(minutes, 0, 0);
   return d;
@@ -50,25 +58,16 @@ export default function AddHabit() {
   const [deadlineDate, setDeadlineDate] = useState(defaultDeadlineDate);
   const [repeatDays, setRepeatDays] = useState<WeekDay[]>([1, 2, 3, 4, 5]);
   const [penaltyText, setPenaltyText] = useState(PENALTY_TWEET_TEXT);
-  const [selfieStoragePath, setSelfieStoragePath] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
   const [isSaving, setIsSaving] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
+  // タスク名 + ペナルティ文の合計で140文字制限（投稿フォーマット: 【名前】\n本文\n\nハッシュタグ\n📅日時）
+  const X_COMBINED_LIMIT = 140;
+  const combinedCharCount = countXChars(name) + countXChars(penaltyText);
+  const isOverXLimit = combinedCharCount > X_COMBINED_LIMIT;
   const habitLimit = isPro ? HABIT_LIMIT_PRO : HABIT_LIMIT_FREE;
 
-  // selfie-capture から戻ってきた時に tempStore から自撮りパスを取得
-  useFocusEffect(
-    useCallback(() => {
-      const pending = tempStore.getSefliePath();
-      if (pending) {
-        setSelfieStoragePath(pending);
-        tempStore.setSefliePath(null);
-      }
-    }, [])
-  );
-
-  // ロード中はスピナー（フラッシュ防止）
   if (habitsLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -77,48 +76,36 @@ export default function AddHabit() {
     );
   }
 
-  // 上限チェック（ロード完了後のみ判定）
   if (habits.length >= habitLimit) {
     return (
       <View style={styles.limitContainer}>
-        <Text style={styles.limitEmoji}>🔒</Text>
+        <Ionicons name="lock-closed" size={48} color={COLORS.border} />
         <Text style={styles.limitTitle}>習慣の上限に達しました</Text>
         <Text style={styles.limitDescription}>
           {isPro
             ? `Proプランでは最大${HABIT_LIMIT_PRO}個まで登録できます。`
-            : `無料プランでは${HABIT_LIMIT_FREE}個まで登録できます。\nProプランにアップグレードすると最大${HABIT_LIMIT_PRO}個登録できます。`}
+            : `無料プランでは${HABIT_LIMIT_FREE}個まで登録できます。\nProプランで最大${HABIT_LIMIT_PRO}個登録できます。`}
         </Text>
 
         {!isPro && (
           <>
-            {/* プラン選択 */}
             <View style={styles.limitPlanRow}>
               <TouchableOpacity
                 style={[styles.limitPlanOption, selectedPlan === 'monthly' && styles.limitPlanSelected]}
                 onPress={() => setSelectedPlan('monthly')}
               >
-                <Text style={[styles.limitPlanLabel, selectedPlan === 'monthly' && styles.limitPlanLabelSelected]}>
-                  月額
-                </Text>
-                <Text style={[styles.limitPlanPrice, selectedPlan === 'monthly' && styles.limitPlanPriceSelected]}>
-                  ¥300/月
-                </Text>
+                <Text style={[styles.limitPlanLabel, selectedPlan === 'monthly' && styles.limitPlanLabelSelected]}>月額</Text>
+                <Text style={[styles.limitPlanPrice, selectedPlan === 'monthly' && styles.limitPlanPriceSelected]}>¥300/月</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.limitPlanOption, selectedPlan === 'yearly' && styles.limitPlanSelected]}
                 onPress={() => setSelectedPlan('yearly')}
               >
                 <View style={styles.limitPlanBadgeRow}>
-                  <Text style={[styles.limitPlanLabel, selectedPlan === 'yearly' && styles.limitPlanLabelSelected]}>
-                    年額
-                  </Text>
-                  <View style={styles.saveBadge}>
-                    <Text style={styles.saveBadgeText}>お得</Text>
-                  </View>
+                  <Text style={[styles.limitPlanLabel, selectedPlan === 'yearly' && styles.limitPlanLabelSelected]}>年額</Text>
+                  <View style={styles.saveBadge}><Text style={styles.saveBadgeText}>お得</Text></View>
                 </View>
-                <Text style={[styles.limitPlanPrice, selectedPlan === 'yearly' && styles.limitPlanPriceSelected]}>
-                  ¥3,000/年
-                </Text>
+                <Text style={[styles.limitPlanPrice, selectedPlan === 'yearly' && styles.limitPlanPriceSelected]}>¥3,000/年</Text>
               </TouchableOpacity>
             </View>
 
@@ -130,9 +117,7 @@ export default function AddHabit() {
               {isPurchaseLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.upgradeButtonText}>
-                  ✨ Proにアップグレード
-                </Text>
+                <Text style={styles.upgradeButtonText}>PRO にアップグレード</Text>
               )}
             </TouchableOpacity>
           </>
@@ -164,6 +149,20 @@ export default function AddHabit() {
       Alert.alert('入力エラー', '繰り返す曜日を1日以上選択してください。');
       return;
     }
+    // 今日が繰り返し対象に含まれる場合のみ時刻チェック
+    const todayWeekday = new Date().getDay() as WeekDay;
+    if (repeatDays.includes(todayWeekday)) {
+      const now = new Date();
+      const deadlineToday = new Date();
+      deadlineToday.setHours(deadlineDate.getHours(), deadlineDate.getMinutes(), 0, 0);
+      const diffMinutes = (deadlineToday.getTime() - now.getTime()) / 60000;
+      // 過去の時刻 → 来週の初回扱いなのでOK
+      // 0〜5分後 → 近すぎるのでNG
+      if (diffMinutes >= 0 && diffMinutes < 5) {
+        Alert.alert('入力エラー', '期限時刻は現在時刻の5分以上後に設定してください。');
+        return;
+      }
+    }
     setIsSaving(true);
     try {
       const hour = String(deadlineDate.getHours()).padStart(2, '0');
@@ -172,14 +171,12 @@ export default function AddHabit() {
         name: name.trim(),
         deadline_time: `${hour}:${minute}`,
         repeat_days: repeatDays,
-        // 写真があればselfie、なければtext
-        penalty_type: selfieStoragePath ? 'selfie' : 'text',
         penalty_text: penaltyText.trim() || null,
-        selfie_storage_path: selfieStoragePath,
       });
+      setPendingCreation();
+      setPendingToast(`「${name.trim()}」を追加しました`, 'success');
       router.back();
-    } catch (error) {
-      console.error('習慣追加エラー:', error);
+    } catch {
       Alert.alert('エラー', '習慣の追加に失敗しました。もう一度お試しください。');
     } finally {
       setIsSaving(false);
@@ -187,6 +184,7 @@ export default function AddHabit() {
   };
 
   return (
+    <View style={styles.wrapper}>
     <ScrollView
       ref={scrollRef}
       style={styles.container}
@@ -195,7 +193,8 @@ export default function AddHabit() {
       keyboardDismissMode="interactive"
       automaticallyAdjustKeyboardInsets={true}
     >
-      <Text style={styles.title}>習慣を追加</Text>
+      {/* ヘッダー */}
+      <PageHeader title="ADD HABIT" />
 
       {/* 習慣名 */}
       <View style={styles.section}>
@@ -205,13 +204,14 @@ export default function AddHabit() {
           value={name}
           onChangeText={setName}
           placeholder="例: 筋トレ30分"
-          placeholderTextColor={COLORS.textSecondary}
+          placeholderTextColor={COLORS.textMuted}
           maxLength={50}
           returnKeyType="done"
+          keyboardAppearance="dark"
         />
       </View>
 
-      {/* 期限時刻（ネイティブドラムロール） */}
+      {/* 期限時刻 */}
       <View style={styles.section}>
         <Text style={styles.label}>期限時刻</Text>
         <Text style={styles.labelHint}>この時刻までに完了しないとペナルティが発動します</Text>
@@ -251,49 +251,40 @@ export default function AddHabit() {
       <View style={styles.section}>
         <Text style={styles.label}>ペナルティ投稿内容</Text>
         <Text style={styles.labelHint}>サボったらこの内容がXに自動投稿されます</Text>
-
-        {/* 投稿テキスト（必須） */}
         <TextInput
-          style={[styles.input, styles.penaltyTextInput]}
+          style={[styles.input, styles.penaltyTextInput, isOverXLimit && styles.inputError]}
           value={penaltyText}
-          onChangeText={setPenaltyText}
+          onChangeText={(text) => {
+            if (countXChars(name) + countXChars(text) <= X_COMBINED_LIMIT) setPenaltyText(text);
+          }}
           multiline
+          blurOnSubmit={false}
           numberOfLines={3}
           placeholder="ペナルティとして投稿するテキスト"
-          placeholderTextColor={COLORS.textSecondary}
-          maxLength={200}
+          placeholderTextColor={COLORS.textMuted}
+          keyboardAppearance="dark"
           onFocus={() => {
             setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
           }}
         />
-
-        {/* 自撮り写真（任意） */}
-        <View style={styles.selfieSection}>
-          <Text style={styles.selfieSectionLabel}>😱 サボった時の顔を登録する（任意）</Text>
-          <Text style={styles.selfieSectionHint}>
-            投稿時にテキストと一緒に晒されます
-          </Text>
-          <TouchableOpacity
-            style={[styles.selfieButton, selfieStoragePath && styles.selfieButtonDone]}
-            onPress={() => router.push('/(modals)/selfie-capture?mode=habit')}
-          >
-            <Text style={[styles.selfieButtonText, selfieStoragePath && styles.selfieButtonTextDone]}>
-              {selfieStoragePath ? '✅ 撮影済み（タップして撮り直す）' : '📸 インカメで撮影する'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={[styles.charCount, isOverXLimit && styles.charCountError]}>
+          タスク名＋本文: {combinedCharCount} / {X_COMBINED_LIMIT}
+        </Text>
       </View>
 
       {/* 保存ボタン */}
       <TouchableOpacity
-        style={[styles.saveButton, isSaving && styles.buttonDisabled]}
+        style={[styles.saveButton, (isSaving || isOverXLimit) && styles.buttonDisabled]}
         onPress={handleSave}
-        disabled={isSaving}
+        disabled={isSaving || isOverXLimit}
       >
         {isSaving ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
-          <Text style={styles.saveButtonText}>追加する</Text>
+          <>
+            <Text style={styles.saveButtonText}>追加する</Text>
+            <Ionicons name="add" size={20} color="#FFFFFF" />
+          </>
         )}
       </TouchableOpacity>
 
@@ -301,104 +292,102 @@ export default function AddHabit() {
         <Text style={styles.cancelButtonText}>キャンセル</Text>
       </TouchableOpacity>
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: { flex: 1, backgroundColor: COLORS.background },
   container: { flex: 1, backgroundColor: COLORS.background },
-  content: { padding: SPACING.xl, paddingTop: 60 },
+  content: { padding: SPACING.xl, paddingTop: 60, paddingBottom: 40 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-  title: { fontSize: 28, fontWeight: 'bold', color: COLORS.text, marginBottom: SPACING.xl },
-  section: { marginBottom: SPACING.lg },
-  label: { fontSize: 15, fontWeight: '600', color: COLORS.text, marginBottom: SPACING.xs },
-  labelHint: { fontSize: 12, color: COLORS.textSecondary, marginBottom: SPACING.sm },
-  input: {
-    backgroundColor: COLORS.surface, borderRadius: 10,
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm + 2,
-    fontSize: 16, color: COLORS.text, borderWidth: 1, borderColor: COLORS.border,
-  },
 
-  // 時間ピッカー（ネイティブドラムロール）
+  section: { marginBottom: SPACING.lg },
+  label: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.textSecondary,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: SPACING.sm,
+  },
+  labelHint: { fontSize: 12, color: COLORS.textMuted, marginBottom: SPACING.sm },
+  input: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 4,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    fontSize: 16,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  inputError: { borderColor: COLORS.danger },
+
   timePickerContainer: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
     alignItems: 'center',
   },
-  timePicker: {
-    width: '100%',
-    height: 150,
-  },
+  timePicker: { width: '100%', height: 150 },
 
-  // 曜日選択
   daysContainer: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
   dayButton: {
-    width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center',
+    width: 44, height: 44, borderRadius: 4,
+    justifyContent: 'center', alignItems: 'center',
     backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
   },
   dayButtonSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  dayText: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
+  dayText: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary },
   dayTextSelected: { color: '#FFFFFF' },
 
-  // ペナルティ設定
-  penaltyTextInput: {
-    height: 80, textAlignVertical: 'top', paddingTop: SPACING.sm, marginBottom: SPACING.md,
-  },
-  selfieSection: { marginTop: SPACING.sm },
-  selfieSectionLabel: { fontSize: 14, fontWeight: '600', color: COLORS.text, marginBottom: 2 },
-  selfieSectionHint: { fontSize: 12, color: COLORS.textSecondary, marginBottom: SPACING.sm },
-  selfieButton: {
-    backgroundColor: COLORS.surface, borderRadius: 10, paddingVertical: SPACING.md,
-    alignItems: 'center', borderWidth: 2, borderColor: COLORS.border, borderStyle: 'dashed',
-  },
-  selfieButtonDone: { borderColor: COLORS.success, backgroundColor: '#F0FDF4', borderStyle: 'solid' },
-  selfieButtonText: { fontSize: 15, fontWeight: '600', color: COLORS.textSecondary },
-  selfieButtonTextDone: { color: COLORS.success },
+  penaltyTextInput: { height: 80, textAlignVertical: 'top', paddingTop: SPACING.sm },
+  charCount: { fontSize: 11, color: COLORS.textSecondary, textAlign: 'right', marginTop: SPACING.xs, fontWeight: '600' },
+  charCountError: { color: COLORS.danger },
 
-  // 保存・キャンセル
   saveButton: {
-    backgroundColor: COLORS.primary, borderRadius: 12, paddingVertical: SPACING.md,
-    alignItems: 'center', marginTop: SPACING.md, minHeight: 52, justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.md,
+    minHeight: 52,
   },
-  buttonDisabled: { opacity: 0.6 },
-  saveButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: 'bold' },
+  buttonDisabled: { opacity: 0.5 },
+  saveButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
   cancelButton: { paddingVertical: SPACING.md, alignItems: 'center', marginTop: SPACING.sm },
-  cancelButtonText: { color: COLORS.textSecondary, fontSize: 16 },
+  cancelButtonText: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '600' },
 
-  // 上限画面
   limitContainer: {
     flex: 1, justifyContent: 'center', alignItems: 'center',
-    padding: SPACING.xl, backgroundColor: COLORS.background,
+    padding: SPACING.xl, backgroundColor: COLORS.background, gap: SPACING.md,
   },
-  limitEmoji: { fontSize: 64, marginBottom: SPACING.lg },
-  limitTitle: { fontSize: 22, fontWeight: 'bold', color: COLORS.text, marginBottom: SPACING.sm },
-  limitDescription: {
-    fontSize: 15, color: COLORS.textSecondary, textAlign: 'center',
-    lineHeight: 22, marginBottom: SPACING.lg,
-  },
-  limitPlanRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md, width: '100%' },
+  limitTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text, letterSpacing: 1 },
+  limitDescription: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
+  limitPlanRow: { flexDirection: 'row', gap: SPACING.sm, width: '100%' },
   limitPlanOption: {
-    flex: 1, borderRadius: 12, padding: SPACING.sm,
-    borderWidth: 2, borderColor: COLORS.border, backgroundColor: COLORS.background, alignItems: 'center',
+    flex: 1, borderRadius: 10, padding: SPACING.sm,
+    borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, alignItems: 'center',
   },
-  limitPlanSelected: { borderColor: COLORS.secondary, backgroundColor: '#E6FAF8' },
+  limitPlanSelected: { borderColor: COLORS.primary },
   limitPlanBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  limitPlanLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
+  limitPlanLabel: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary },
   limitPlanLabelSelected: { color: COLORS.text },
-  limitPlanPrice: { fontSize: 15, fontWeight: 'bold', color: COLORS.textSecondary, marginTop: 2 },
-  limitPlanPriceSelected: { color: COLORS.secondary },
-  saveBadge: {
-    backgroundColor: COLORS.primary, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1,
-  },
-  saveBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: 'bold' },
+  limitPlanPrice: { fontSize: 15, fontWeight: '800', color: COLORS.textSecondary, marginTop: 2 },
+  limitPlanPriceSelected: { color: COLORS.primary },
+  saveBadge: { backgroundColor: COLORS.primary, borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 },
+  saveBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
   upgradeButton: {
-    backgroundColor: COLORS.secondary, borderRadius: 12, paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xl, marginBottom: SPACING.sm, minHeight: 52,
-    justifyContent: 'center', alignItems: 'center', width: '100%',
+    backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl, minHeight: 52, justifyContent: 'center', alignItems: 'center', width: '100%',
   },
-  upgradeButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  upgradeButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', letterSpacing: 1 },
   closeButton: { paddingVertical: SPACING.sm },
-  closeButtonText: { color: COLORS.textSecondary, fontSize: 16 },
+  closeButtonText: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '600' },
 });

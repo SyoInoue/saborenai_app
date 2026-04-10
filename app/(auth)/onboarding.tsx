@@ -1,6 +1,5 @@
 /**
  * オンボーディング画面
- * 3スライドのスワイプUI。最後のスライドで同意してログインへ進む。
  */
 
 import { useRef, useState } from 'react';
@@ -12,45 +11,43 @@ import {
   Dimensions,
   TouchableOpacity,
   ViewToken,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SPACING } from '@/constants/config';
 
 const { width } = Dimensions.get('window');
 
 type Slide = {
   id: string;
+  number: string;
   title: string;
   description: string;
-  emoji: string;
-  bgColor: string;
+  iconName: keyof typeof import('@expo/vector-icons').Ionicons.glyphMap;
 };
 
 const SLIDES: Slide[] = [
   {
     id: '1',
+    number: '01',
     title: 'サボったら\n自動投稿される',
-    description:
-      '習慣をサボると、自分のXアカウントに\n恥ずかしい投稿が自動で行われます。\n外圧で習慣を強制的に継続しよう。',
-    emoji: '😱',
-    bgColor: '#FF6B6B',
+    description: '習慣をサボると、自分のXアカウントに\n恥ずかしい投稿が自動で行われます。\n外圧で習慣を強制的に継続しよう。',
+    iconName: 'flash',
   },
   {
     id: '2',
-    title: 'ペナルティは\n2種類',
-    description:
-      '📝 テキストモード\n「私はサボりました。だらしのない人間です。」\n\n📸 自撮りモード\n撮影済みの自撮り写真と一緒に投稿',
-    emoji: '🐦',
-    bgColor: '#4ECDC4',
+    number: '02',
+    title: 'ペナルティは\nテキストで設定',
+    description: '「私はサボりました。」など\nサボった時に投稿されるテキストを\n自分で設定できます。',
+    iconName: 'document-text',
   },
   {
     id: '3',
+    number: '03',
     title: '免責事項',
-    description:
-      '• 本アプリはXへの自動投稿を行います\n• 投稿を取り消す機能はありません\n• 習慣設定は責任を持って行ってください\n• ペナルティ投稿の内容はプレビューできます',
-    emoji: '⚠️',
-    bgColor: '#A78BFA',
+    description: '• 本アプリはXへの自動投稿を行います\n• 投稿を取り消す機能はありません\n• 習慣設定は責任を持って行ってください\n• ペナルティ投稿の内容はプレビューできます',
+    iconName: 'warning',
   },
 ];
 
@@ -77,19 +74,34 @@ export default function Onboarding() {
 
   const renderSlide = ({ item }: { item: Slide }) => (
     <View style={[styles.slide, { width }]}>
-      <LinearGradient
-        colors={[item.bgColor, `${item.bgColor}CC`]}
-        style={styles.gradient}
-      >
-        <Text style={styles.emoji}>{item.emoji}</Text>
+      <View style={styles.slideInner}>
+        {/* スライド番号 */}
+        <Text style={styles.slideNumber}>{item.number}</Text>
+        <View style={styles.dividerLine} />
+
+        {/* アイコン */}
+        <View style={styles.iconWrap}>
+          <Ionicons name={item.iconName} size={48} color={COLORS.primary} />
+        </View>
+
+        {/* タイトル */}
         <Text style={styles.title}>{item.title}</Text>
+
+        {/* 説明 */}
         <Text style={styles.description}>{item.description}</Text>
-      </LinearGradient>
+      </View>
     </View>
   );
 
   return (
     <View style={styles.container}>
+      {/* 背景ロゴ */}
+      <Image
+        source={require('../../assets/yaraneva_bg_overlay.png')}
+        style={styles.bgOverlay}
+        resizeMode="cover"
+      />
+
       <FlatList
         ref={flatListRef}
         data={SLIDES}
@@ -102,25 +114,33 @@ export default function Onboarding() {
         viewabilityConfig={{ viewAreaCoveragePercentThreshold: 50 }}
       />
 
-      {/* ドットインジケーター */}
-      <View style={styles.dotsContainer}>
-        {SLIDES.map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.dot,
-              index === currentIndex ? styles.dotActive : styles.dotInactive,
-            ]}
-          />
-        ))}
-      </View>
+      {/* ボトムエリア */}
+      <View style={styles.bottom}>
+        {/* ドットインジケーター */}
+        <View style={styles.dotsContainer}>
+          {SLIDES.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.dot,
+                index === currentIndex ? styles.dotActive : styles.dotInactive,
+              ]}
+            />
+          ))}
+        </View>
 
-      {/* ボタン */}
-      <TouchableOpacity style={styles.button} onPress={handleNext}>
-        <Text style={styles.buttonText}>
-          {currentIndex === SLIDES.length - 1 ? '同意して始める' : '次へ'}
-        </Text>
-      </TouchableOpacity>
+        {/* ボタン */}
+        <TouchableOpacity style={styles.button} onPress={handleNext}>
+          <Text style={styles.buttonText}>
+            {currentIndex === SLIDES.length - 1 ? '同意して始める' : '次へ'}
+          </Text>
+          <Ionicons
+            name={currentIndex === SLIDES.length - 1 ? 'checkmark' : 'arrow-forward'}
+            size={18}
+            color="#FFFFFF"
+          />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -130,47 +150,73 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  bgOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.5,
+  },
   slide: {
     flex: 1,
   },
-  gradient: {
+  slideInner: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: SPACING.xl,
-    paddingBottom: 160,
+    paddingTop: 100,
+    paddingBottom: 200,
   },
-  emoji: {
-    fontSize: 80,
-    marginBottom: SPACING.lg,
+  slideNumber: {
+    fontSize: 64,
+    fontWeight: '900',
+    color: COLORS.primary,
+    lineHeight: 64,
+    letterSpacing: -2,
+    marginBottom: SPACING.sm,
+  },
+  dividerLine: {
+    height: 2,
+    backgroundColor: COLORS.border,
+    marginBottom: SPACING.xl,
+  },
+  iconWrap: {
+    marginBottom: SPACING.xl,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
+    fontSize: 32,
+    fontWeight: '900',
+    color: COLORS.text,
     marginBottom: SPACING.lg,
-    lineHeight: 36,
+    lineHeight: 40,
+    letterSpacing: -0.5,
   },
   description: {
-    fontSize: 16,
-    color: '#FFFFFFCC',
-    textAlign: 'center',
+    fontSize: 15,
+    color: COLORS.textSecondary,
     lineHeight: 26,
   },
-  dotsContainer: {
+  bottom: {
     position: 'absolute',
-    bottom: 120,
+    bottom: 0,
     left: 0,
     right: 0,
+    padding: SPACING.xl,
+    paddingBottom: 48,
+    backgroundColor: COLORS.background,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  dotsContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: SPACING.sm,
+    gap: SPACING.xs,
+    marginBottom: SPACING.lg,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    height: 3,
+    borderRadius: 2,
   },
   dotActive: {
     backgroundColor: COLORS.primary,
@@ -178,20 +224,23 @@ const styles = StyleSheet.create({
   },
   dotInactive: {
     backgroundColor: COLORS.border,
+    width: 8,
   },
   button: {
-    position: 'absolute',
-    bottom: 48,
-    left: SPACING.xl,
-    right: SPACING.xl,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: SPACING.md,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    minHeight: 52,
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
 });

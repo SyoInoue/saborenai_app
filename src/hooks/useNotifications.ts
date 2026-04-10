@@ -40,7 +40,6 @@ export function useNotifications() {
     }
 
     if (finalStatus !== 'granted') {
-      console.log('プッシュ通知の権限が拒否されました');
       return;
     }
 
@@ -65,7 +64,7 @@ export function useNotifications() {
         .eq('id', user.id);
 
       if (error) {
-        console.error('Push Token保存エラー:', error);
+        // push token save failure is non-fatal
       }
     }
   }, [user]);
@@ -98,8 +97,8 @@ export function useNotifications() {
       await Notifications.scheduleNotificationAsync({
         identifier: notificationId,
         content: {
-          title: '⏰ まだ完了していません！',
-          body: `「${habit.name}」の期限まで残り30分です！急いで！`,
+          title: '🔴 まだ終わってないぞ！',
+          body: `「${habit.name}」の期限まであと30分。サボったらXに投稿されるぞ！`,
           sound: true,
           data: { habitId: habit.id },
         },

@@ -3,69 +3,63 @@
  * ホーム・履歴・設定の3タブ
  */
 
-import { Text } from 'react-native';
 import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/constants/config';
+import { DeletedHabitsProvider } from '@/providers/DeletedHabitsProvider';
 
 export default function TabsLayout() {
   return (
+    <DeletedHabitsProvider>
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
+        tabBarInactiveTintColor: '#555555',
         tabBarStyle: {
-          backgroundColor: COLORS.background,
+          backgroundColor: '#111111',
           borderTopColor: COLORS.border,
+          borderTopWidth: 1,
           paddingBottom: 8,
-          paddingTop: 4,
-          height: 60,
+          paddingTop: 6,
+          height: 64,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
+          fontSize: 10,
+          fontWeight: '700',
+          letterSpacing: 0.5,
+          textTransform: 'uppercase',
         },
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
-          title: 'ホーム',
+          title: 'HOME',
           tabBarIcon: ({ color, size }) => (
-            <TabIcon emoji="🏠" color={color} size={size} />
+            <Ionicons name="home" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
-          title: '履歴',
+          title: 'CALENDAR',
           tabBarIcon: ({ color, size }) => (
-            <TabIcon emoji="📅" color={color} size={size} />
+            <Ionicons name="calendar" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: '設定',
+          title: 'SETTINGS',
           tabBarIcon: ({ color, size }) => (
-            <TabIcon emoji="⚙️" color={color} size={size} />
+            <Ionicons name="settings" size={size} color={color} />
           ),
         }}
       />
     </Tabs>
-  );
-}
-
-type TabIconProps = {
-  emoji: string;
-  color: string;
-  size: number;
-};
-
-function TabIcon({ emoji, size }: TabIconProps) {
-  return (
-    <Text style={{ fontSize: size }}>{emoji}</Text>
+    </DeletedHabitsProvider>
   );
 }

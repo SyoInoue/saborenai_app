@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "サボれない習慣化アプリ",
+    "name": "ヤラネバ",
     "slug": "saborenai-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/yaraneva_icon_1024.png",
     "scheme": "saboapp",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/yaraneva_combined.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#161616"
     },
     "ios": {
       "supportsTablet": false,
@@ -20,12 +20,13 @@
         "NSPhotoLibraryUsageDescription": "自撮り写真を保存するために使用します。",
         "NSUserNotificationsUsageDescription": "習慣のリマインダーとペナルティ通知を送信するために使用します.",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "buildNumber": "3"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/yaraneva_icon_1024.png",
+        "backgroundColor": "#161616"
       },
       "package": "com.inouesyo.saboapp",
       "permissions": [
@@ -45,7 +46,7 @@
       [
         "expo-notifications",
         {
-          "color": "#FF6B6B"
+          "color": "#E8002A"
         }
       ],
       "expo-secure-store",
@@ -54,7 +55,7 @@
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-3940256099942544~3347511713",
-          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+          "iosAppId": "ca-app-pub-5506706107288721~7131686061"
         }
       ],
       "@react-native-community/datetimepicker"

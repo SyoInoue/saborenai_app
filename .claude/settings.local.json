@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__gemini__edit_image"
+    ]
+  }
+}

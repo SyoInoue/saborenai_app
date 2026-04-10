@@ -3,20 +3,19 @@
  */
 
 /** ペナルティタイプ */
-export type PenaltyType = 'text' | 'selfie';
+export type PenaltyType = 'text';
 
-/** ユーザープロファイル（DBのusersテーブルに対応） */
+/** ユーザープロファイル（クライアント側・DBのusersテーブルの一部に対応）
+ * NOTE: x_access_token / x_refresh_token は機密情報のためクライアントには返さない。
+ *       これらはEdge Function（サーバー側）でのみ使用する。
+ */
 export interface User {
   id: string;
   x_user_id: string;
   x_username: string;
   x_display_name: string | null;
   x_avatar_url: string | null;
-  x_access_token: string | null;
-  x_refresh_token: string | null;
-  x_token_expires_at: string | null;
   penalty_type: PenaltyType;
-  selfie_storage_path: string | null;
   is_pro: boolean;
   pro_expires_at: string | null;
   expo_push_token: string | null;
@@ -38,7 +37,6 @@ export interface Habit {
   is_active: boolean;
   penalty_type: PenaltyType;
   penalty_text: string | null;
-  selfie_storage_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -69,9 +67,7 @@ export interface HabitFormData {
   name: string;
   deadline_time: string; // "HH:MM" 形式
   repeat_days: WeekDay[];
-  penalty_type: PenaltyType;
   penalty_text: string | null;
-  selfie_storage_path: string | null;
 }
 
 /** 習慣カードの表示状態 */

@@ -12,17 +12,21 @@ export const X_TOKEN_URL = 'https://api.twitter.com/2/oauth2/token';
 export const X_REDIRECT_URI = 'saboapp://oauth/callback';
 export const X_SCOPES = ['tweet.read', 'tweet.write', 'users.read', 'offline.access'];
 
-/** カラーパレット */
+/** カラーパレット — ダーク × レッド テーマ */
 export const COLORS = {
-  primary: '#FF6B6B',
-  secondary: '#4ECDC4',
-  background: '#FFFFFF',
-  surface: '#F8F9FA',
-  text: '#1A1A2E',
-  textSecondary: '#6C757D',
-  danger: '#DC3545',
-  success: '#28A745',
-  border: '#E0E0E0',
+  primary: '#C41230',       // メインレッド（深みのある落ち着いた赤）
+  secondary: '#C41230',     // セカンダリ（プロバッジ等）
+  background: '#161616',    // ダーク背景（真っ黒より少し明るく）
+  surface: '#202020',       // カード・シート背景
+  surfaceElevated: '#2A2A2A', // 浮き上がり要素
+  text: '#FFFFFF',          // プライマリテキスト
+  textSecondary: '#C0C0C0', // サブテキスト
+  textMuted: '#888888',     // 最暗テキスト
+  danger: '#C41230',        // 危険・エラー（primaryと統一）
+  success: '#00C853',       // 達成・成功
+  warning: '#FF6D00',       // 警告（カウントダウン切迫）
+  border: '#2A2A2A',        // 細ボーダー
+  borderBright: '#3A3A3A',  // 少し明るいボーダー
 } as const;
 
 /** スペーシング */
@@ -44,11 +48,9 @@ export const REVENUECAT_PRO_PRODUCT_ID_YEARLY = 'pro_yearly';
 
 /** ペナルティタイプ */
 export const PENALTY_TYPE_TEXT = 'text' as const;
-export const PENALTY_TYPE_SELFIE = 'selfie' as const;
 
-/** ペナルティツイートテキスト */
-export const PENALTY_TWEET_TEXT =
-  '私はサボりました。だらしのない人間です。 #サボれない習慣化アプリ';
+/** ペナルティツイートテキスト（ハッシュタグはサーバー側で自動付与） */
+export const PENALTY_TWEET_TEXT = '私はサボりました。だらしのない人間です。';
 
 /** AdMob テスト用ID (本番では差し替え) */
 export const ADMOB_BANNER_ID_IOS = 'ca-app-pub-3940256099942544/2934735716';

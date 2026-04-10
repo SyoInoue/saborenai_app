@@ -3,6 +3,7 @@
  * Proユーザーには非表示、Freeユーザーにはバナー広告を表示する
  */
 
+import { memo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { BannerAd as AdMobBanner, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import { usePurchase } from '@/providers/PurchaseProvider';
@@ -11,7 +12,7 @@ import { COLORS } from '@/constants/config';
 
 const IS_DEV = __DEV__;
 
-export function BannerAd() {
+export const BannerAd = memo(function BannerAd() {
   const { isPro } = usePurchase();
 
   // Proユーザーは非表示
@@ -26,13 +27,13 @@ export function BannerAd() {
         unitId={adUnitId}
         size={BannerAdSize.BANNER}
         requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-        onAdFailedToLoad={(error) => {
-          console.error('AdMobバナー読み込み失敗:', error);
+        onAdFailedToLoad={() => {
+          // ad load failures are non-fatal
         }}
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

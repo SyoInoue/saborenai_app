@@ -9,8 +9,10 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+// CORS はブラウザからの直接呼び出しには不要（pg_cronからのサーバー間通信のみ）
+// 念のため同一オリジンのみ許可
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('SUPABASE_URL') ?? '',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -20,34 +22,35 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-  // SUPABASE_SERVICE_ROLE_KEY は Supabase が自動提供する環境変数
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? '';
-  // pg_cronから受け取ったAuthorizationヘッダーをそのままpost-penaltyへ転送する
-  // （SUPABASE_SERVICE_ROLE_KEYの形式がJWTとして認識されない場合への対策）
+  const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  // pg_cronから受け取ったAuthorizationをそのままpost-penaltyに転送する（SUPABASE_SERVICE_ROLE_KEYは直接使えないため）
   const incomingAuth = req.headers.get('Authorization') ?? `Bearer ${serviceRoleKey}`;
+
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // 期限切れ & 未完了 & ペナルティ未発動のログを取得
+    // 期限切れ & 未完了 & ペナルティ未発動 & 習慣が有効なログを取得
+    // habits!inner で JOIN し is_active=false（削除済み）の習慣はスキップ
     const { data: overdueLog, error: fetchError } = await supabase
       .from('habit_logs')
-      .select('id, user_id, habit_id')
+      .select('id, user_id, habit_id, habits!inner(is_active)')
       .lte('deadline_at', new Date().toISOString())
       .is('completed_at', null)
-      .eq('penalty_triggered', false);
+      .eq('penalty_triggered', false)
+      .eq('habits.is_active', true);
 
     if (fetchError) {
       console.error('期限切れログ取得エラー:', fetchError);
       return new Response(
         JSON.stringify({ error: fetchError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     if (!overdueLog || overdueLog.length === 0) {
       return new Response(
         JSON.stringify({ processed: 0 }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -63,11 +66,11 @@ Deno.serve(async (req: Request) => {
       console.error('ペナルティフラグ更新エラー:', updateError);
       return new Response(
         JSON.stringify({ error: updateError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // 各ログに対してpost-penaltyを呼び出す（受け取ったAuthorizationをそのまま転送）
+    // 各ログに対してpost-penaltyを呼び出す（サービスロールキーで認証）
     const results = await Promise.allSettled(
       overdueLog.map(async (log: { id: string; user_id: string }) => {
         const res = await fetch(`${supabaseUrl}/functions/v1/post-penalty`, {
@@ -76,7 +79,8 @@ Deno.serve(async (req: Request) => {
             'Content-Type': 'application/json',
             'Authorization': incomingAuth,
           },
-          body: JSON.stringify({ log_id: log.id, user_id: log.user_id }),
+          // user_idはlog_idから導出させるため渡さない（信頼できるのはlog_idのみ）
+          body: JSON.stringify({ log_id: log.id }),
         });
         const body = await res.text();
         if (!res.ok) {
@@ -95,14 +99,14 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ processed, failed }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('予期しないエラー:', error);
     return new Response(
       JSON.stringify({ error: '内部サーバーエラー' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 });

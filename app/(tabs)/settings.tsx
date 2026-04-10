@@ -1,6 +1,5 @@
 /**
  * 設定画面
- * アカウント情報・ペナルティ設定変更・習慣管理・Pro課金・ログアウト
  */
 
 import { useState, useCallback } from 'react';
@@ -13,47 +12,62 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { PageHeader } from '@/components/PageHeader';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePurchase } from '@/providers/PurchaseProvider';
 import { useHabits } from '@/hooks/useHabits';
 import { supabase } from '@/lib/supabase';
+import { BannerAd } from '@/components/BannerAd';
+import { Toast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { COLORS, SPACING } from '@/constants/config';
+import { useDeletedHabits } from '@/providers/DeletedHabitsProvider';
+import { consumePendingCreation, isPendingCreation } from '@/lib/pendingToast';
 import type { ProPlan } from '@/types';
+
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+
+function formatRepeatDays(days: number[]): string {
+  return [...days].sort((a, b) => a - b).map((d) => WEEKDAY_LABELS[d]).join(' · ');
+}
 
 export default function Settings() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { isPro, purchasePro, restorePurchases, isLoading: isPurchaseLoading } = usePurchase();
-  const { habits, deleteHabit, refetch } = useHabits();
-
-  // タブフォーカス時に習慣一覧を再取得
-  useFocusEffect(
-    useCallback(() => {
-      refetch();
-    }, [refetch])
-  );
+  const { habits, deleteHabit, refetch, isLoading: isHabitsLoading } = useHabits();
+  const { markDeleted } = useDeletedHabits();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<ProPlan>('monthly');
+  const { toast, showToast, hideToast } = useToast();
+
+  useFocusEffect(
+    useCallback(() => {
+      const run = async () => {
+        await refetch();
+        consumePendingCreation();
+      };
+      run();
+    }, [refetch])
+  );
 
   const handleSignOut = () => {
-    Alert.alert(
-      'ログアウト',
-      'ログアウトしますか？',
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: 'ログアウト',
-          style: 'destructive',
-          onPress: async () => {
-            setIsSigningOut(true);
-            await signOut();
-            router.replace('/(auth)/onboarding');
-          },
+    Alert.alert('ログアウト', 'ログアウトしますか？', [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: 'ログアウト',
+        style: 'destructive',
+        onPress: async () => {
+          setIsSigningOut(true);
+          await signOut();
+          router.replace('/(auth)/onboarding');
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleDeleteAccount = () => {
@@ -68,12 +82,13 @@ export default function Settings() {
           onPress: async () => {
             try {
               if (!user) return;
-              // usersテーブルの削除（CASCADEで関連データも削除）
+              // 明示的に全データを削除（RLS + CASCADEの両方で確実に消す）
+              await supabase.from('habit_logs').delete().eq('user_id', user.id);
+              await supabase.from('habits').delete().eq('user_id', user.id);
               await supabase.from('users').delete().eq('id', user.id);
               await signOut();
               router.replace('/(auth)/onboarding');
-            } catch (error) {
-              console.error('アカウント削除エラー:', error);
+            } catch {
               Alert.alert('エラー', 'アカウントの削除に失敗しました。');
             }
           },
@@ -83,429 +98,332 @@ export default function Settings() {
   };
 
   const handleDeleteHabit = (habitId: string, habitName: string) => {
-    Alert.alert(
-      '習慣の削除',
-      `「${habitName}」を削除しますか？`,
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '削除',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteHabit(habitId);
-            } catch (error) {
-              console.error('習慣削除エラー:', error);
-              Alert.alert('エラー', '習慣の削除に失敗しました。');
-            }
-          },
+    Alert.alert(`「${habitName}」を削除しますか？`, '', [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '削除',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            markDeleted(habitId);
+            await deleteHabit(habitId);
+            showToast(`「${habitName}」を削除しました`, 'error');
+          } catch {
+            Alert.alert('エラー', '習慣の削除に失敗しました。');
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   if (!user) return null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>設定</Text>
+    <View style={styles.wrapper}>
 
-      {/* Xアカウント情報 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Xアカウント</Text>
-        <View style={styles.accountCard}>
-          {user.x_avatar_url && (
-            <Image source={{ uri: user.x_avatar_url }} style={styles.avatar} />
-          )}
-          <View>
-            <Text style={styles.displayName}>{user.x_display_name ?? user.x_username}</Text>
-            <Text style={styles.username}>@{user.x_username}</Text>
-          </View>
-          {isPro && (
-            <View style={styles.proBadge}>
-              <Text style={styles.proBadgeText}>PRO</Text>
-            </View>
-          )}
-        </View>
-      </View>
+      <Toast message={toast.message} type={toast.type} visible={toast.visible} onHide={hideToast} />
 
-      {/* 習慣管理 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>習慣の管理</Text>
-        {habits.length === 0 ? (
-          <Text style={styles.emptyText}>習慣がまだありません</Text>
-        ) : (
-          habits.map((habit) => (
-            <View key={habit.id} style={styles.habitRow}>
-              <View style={styles.habitInfo}>
-                <Text style={styles.habitName}>{habit.name}</Text>
-                <Text style={styles.habitDeadline}>期限: {habit.deadline_time.slice(0, 5)}</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDeleteHabit(habit.id, habit.name)}
-              >
-                <Text style={styles.deleteButtonText}>削除</Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
-      </View>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
-      {/* Proプラン */}
-      {!isPro ? (
+        <PageHeader title="SETTINGS" />
+
+        {/* Xアカウント */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>プレミアムプラン</Text>
-          <View style={styles.proCard}>
-            <Text style={styles.proCardTitle}>✨ Proプランにアップグレード</Text>
-            <Text style={styles.proCardFeatures}>
-              • 習慣を最大10個登録{'\n'}
-              • 広告非表示
-            </Text>
+          <Text style={styles.sectionLabel}>X ACCOUNT</Text>
+          <View style={styles.accountCard}>
+            {user.x_avatar_url ? (
+              <Image source={{ uri: user.x_avatar_url }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Ionicons name="person" size={22} color={COLORS.textSecondary} />
+              </View>
+            )}
+            <View style={styles.accountInfo}>
+              <Text style={styles.displayName}>{user.x_display_name ?? user.x_username}</Text>
+              <Text style={styles.username}>@{user.x_username}</Text>
+            </View>
+            {isPro && (
+              <View style={styles.proBadge}>
+                <Text style={styles.proBadgeText}>PRO</Text>
+              </View>
+            )}
+          </View>
+        </View>
 
-            {/* プラン選択 */}
-            <View style={styles.planSelector}>
-              <TouchableOpacity
-                style={[
-                  styles.planOption,
-                  selectedPlan === 'monthly' && styles.planOptionSelected,
-                ]}
-                onPress={() => setSelectedPlan('monthly')}
-              >
-                <Text style={[
-                  styles.planLabel,
-                  selectedPlan === 'monthly' && styles.planLabelSelected,
-                ]}>月額プラン</Text>
-                <Text style={[
-                  styles.planPrice,
-                  selectedPlan === 'monthly' && styles.planPriceSelected,
-                ]}>¥300/月</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.planOption,
-                  selectedPlan === 'yearly' && styles.planOptionSelected,
-                ]}
-                onPress={() => setSelectedPlan('yearly')}
-              >
-                <View style={styles.planBadgeRow}>
-                  <Text style={[
-                    styles.planLabel,
-                    selectedPlan === 'yearly' && styles.planLabelSelected,
-                  ]}>年額プラン</Text>
-                  <View style={styles.saveBadge}>
-                    <Text style={styles.saveBadgeText}>お得</Text>
+        {/* 習慣管理 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>HABITS</Text>
+          {(isHabitsLoading || isPendingCreation()) ? (
+            <View style={styles.emptyCard}>
+              <ActivityIndicator color={COLORS.primary} size="small" />
+            </View>
+          ) : habits.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>習慣がまだありません</Text>
+            </View>
+          ) : (
+            habits.map((habit) => (
+              <View key={habit.id} style={styles.habitRow}>
+                <View style={styles.accentLine} />
+                <View style={styles.habitInfo}>
+                  <Text style={styles.habitName}>{habit.name}</Text>
+                  <View style={styles.habitMeta}>
+                    <Ionicons name="time-outline" size={11} color={COLORS.textSecondary} />
+                    <Text style={styles.habitMetaText}>{habit.deadline_time.slice(0, 5)}</Text>
+                    <Text style={styles.habitMetaDot}>·</Text>
+                    <Ionicons name="calendar-outline" size={11} color={COLORS.textSecondary} />
+                    <Text style={styles.habitMetaText}>{formatRepeatDays(habit.repeat_days)}</Text>
                   </View>
                 </View>
-                <Text style={[
-                  styles.planPrice,
-                  selectedPlan === 'yearly' && styles.planPriceSelected,
-                ]}>¥3,000/年</Text>
-                <Text style={styles.planSubPrice}>（¥250/月相当）</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.proButton, isPurchaseLoading && styles.buttonDisabled]}
-              onPress={() => purchasePro(selectedPlan)}
-              disabled={isPurchaseLoading}
-            >
-              {isPurchaseLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.proButtonText}>
-                  {selectedPlan === 'yearly' ? '年額プランで始める' : '月額プランで始める'}
-                </Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.restoreButton} onPress={restorePurchases}>
-              <Text style={styles.restoreButtonText}>購入を復元する</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>プレミアムプラン</Text>
-          <View style={styles.proActiveCard}>
-            <Text style={styles.proActiveText}>✨ Proプラン利用中</Text>
-            <Text style={styles.proActiveDesc}>習慣10個・広告非表示が有効です</Text>
-          </View>
-        </View>
-      )}
-
-      {/* アカウント操作 */}
-      <View style={styles.section}>
-        <TouchableOpacity
-          style={[styles.menuItem, styles.dangerItem]}
-          onPress={handleSignOut}
-          disabled={isSigningOut}
-        >
-          {isSigningOut ? (
-            <ActivityIndicator color={COLORS.danger} />
-          ) : (
-            <Text style={[styles.menuItemText, styles.dangerText]}>ログアウト</Text>
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteHabit(habit.id, habit.name)}
+                >
+                  <Text style={styles.deleteButtonText}>削除</Text>
+                </TouchableOpacity>
+              </View>
+            ))
           )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.menuItem, styles.dangerItem]}
-          onPress={handleDeleteAccount}
-        >
-          <Text style={[styles.menuItemText, styles.dangerText]}>アカウントを削除する</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        </View>
+
+        {/* Proプラン */}
+        {!isPro ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>PREMIUM</Text>
+            <View style={styles.proCard}>
+              <Text style={styles.proCardTitle}>PRO にアップグレード</Text>
+              <View style={styles.featureList}>
+                <View style={styles.featureRow}>
+                  <Ionicons name="checkmark" size={14} color={COLORS.primary} />
+                  <Text style={styles.featureText}>習慣を最大10個登録</Text>
+                </View>
+                <View style={styles.featureRow}>
+                  <Ionicons name="checkmark" size={14} color={COLORS.primary} />
+                  <Text style={styles.featureText}>広告非表示</Text>
+                </View>
+              </View>
+
+              <View style={styles.planSelector}>
+                <TouchableOpacity
+                  style={[styles.planOption, selectedPlan === 'monthly' && styles.planSelected]}
+                  onPress={() => setSelectedPlan('monthly')}
+                >
+                  <Text style={[styles.planLabel, selectedPlan === 'monthly' && styles.planLabelSelected]}>月額</Text>
+                  <Text style={[styles.planPrice, selectedPlan === 'monthly' && styles.planPriceSelected]}>¥300</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.planOption, selectedPlan === 'yearly' && styles.planSelected]}
+                  onPress={() => setSelectedPlan('yearly')}
+                >
+                  <View style={styles.planBadgeRow}>
+                    <Text style={[styles.planLabel, selectedPlan === 'yearly' && styles.planLabelSelected]}>年額</Text>
+                    <View style={styles.saveBadge}><Text style={styles.saveBadgeText}>お得</Text></View>
+                  </View>
+                  <Text style={[styles.planPrice, selectedPlan === 'yearly' && styles.planPriceSelected]}>¥3,000</Text>
+                  <Text style={styles.planSub}>¥250/月相当</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.proButton, isPurchaseLoading && styles.buttonDisabled]}
+                onPress={() => purchasePro(selectedPlan)}
+                disabled={isPurchaseLoading}
+              >
+                {isPurchaseLoading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.proButtonText}>
+                    {selectedPlan === 'yearly' ? '年額プランで始める' : '月額プランで始める'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.restoreButton} onPress={restorePurchases}>
+                <Text style={styles.restoreText}>購入を復元する</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.legalNotice}>
+                <Text
+                  style={styles.legalLink}
+                  onPress={() => Linking.openURL('https://syoinoue.github.io/yaraneva-legal/terms-of-service.html')}
+                >利用規約</Text>
+                {'  ・  '}
+                <Text
+                  style={styles.legalLink}
+                  onPress={() => Linking.openURL('https://syoinoue.github.io/yaraneva-legal/privacy-policy.html')}
+                >プライバシーポリシー</Text>
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>PREMIUM</Text>
+            <View style={styles.proActiveCard}>
+              <Ionicons name="star" size={20} color={COLORS.primary} />
+              <View>
+                <Text style={styles.proActiveTitle}>PRO プラン利用中</Text>
+                <Text style={styles.proActiveDesc}>習慣10個・広告非表示が有効です</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* アカウント操作 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>ACCOUNT</Text>
+
+          <TouchableOpacity
+            style={styles.dangerRow}
+            onPress={handleSignOut}
+            disabled={isSigningOut}
+          >
+            {isSigningOut ? (
+              <ActivityIndicator color={COLORS.danger} size="small" />
+            ) : (
+              <Ionicons name="log-out-outline" size={18} color={COLORS.danger} />
+            )}
+            <Text style={styles.dangerText}>ログアウト</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.dangerRow} onPress={handleDeleteAccount}>
+            <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+            <Text style={styles.dangerText}>アカウントを削除する</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+      <BannerAd />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  content: {
-    padding: SPACING.lg,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SPACING.xl,
-  },
-  section: {
-    marginBottom: SPACING.xl,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
+  wrapper: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  content: { padding: SPACING.lg, paddingTop: 60, paddingBottom: 40 },
+
+
+  section: { marginBottom: SPACING.xl },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: '800',
     color: COLORS.textSecondary,
+    letterSpacing: 3,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginBottom: SPACING.sm,
   },
+
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: 8,
     padding: SPACING.md,
     gap: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.border,
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.border },
+  avatarFallback: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: COLORS.surfaceElevated,
+    justifyContent: 'center', alignItems: 'center',
   },
-  displayName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  username: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
+  accountInfo: { flex: 1 },
+  displayName: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  username: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   proBadge: {
-    marginLeft: 'auto',
-    backgroundColor: COLORS.secondary,
-    borderRadius: 6,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 2,
+    backgroundColor: COLORS.primary, borderRadius: 3,
+    paddingHorizontal: SPACING.sm, paddingVertical: 2,
   },
-  proBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: 'bold',
+  proBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+
+  emptyCard: {
+    backgroundColor: COLORS.surface, borderRadius: 8, padding: SPACING.lg,
+    borderWidth: 1, borderColor: COLORS.border, alignItems: 'center',
   },
-  menuItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
-    marginBottom: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  menuItemText: {
-    fontSize: 16,
-    color: COLORS.text,
-  },
-  menuItemArrow: {
-    fontSize: 20,
-    color: COLORS.textSecondary,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    padding: SPACING.md,
-  },
+  emptyText: { fontSize: 13, color: COLORS.textSecondary },
+
   habitRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: SPACING.md,
+    borderRadius: 8,
     marginBottom: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
+    overflow: 'hidden',
   },
-  habitInfo: {
-    flex: 1,
-  },
-  habitName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  habitDeadline: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
+  accentLine: { width: 3, alignSelf: 'stretch', backgroundColor: COLORS.primary },
+  habitInfo: { flex: 1, padding: SPACING.md },
+  habitName: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 4 },
+  habitMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  habitMetaText: { fontSize: 11, color: COLORS.textSecondary },
+  habitMetaDot: { fontSize: 11, color: COLORS.textMuted },
   deleteButton: {
-    backgroundColor: '#FFF5F5',
-    borderRadius: 8,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginRight: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.danger,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteButtonText: {
     color: COLORS.danger,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
   },
+
   proCard: {
-    backgroundColor: '#F0FDF9',
-    borderRadius: 16,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.secondary,
+    backgroundColor: COLORS.surface, borderRadius: 8, padding: SPACING.lg,
+    borderWidth: 1, borderColor: COLORS.border,
   },
-  proCardTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: SPACING.sm,
-  },
-  proCardFeatures: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
-    marginBottom: SPACING.md,
-  },
-  planSelector: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
-  },
+  proCardTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text, marginBottom: SPACING.sm, letterSpacing: 0.5 },
+  featureList: { gap: 6, marginBottom: SPACING.md },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  featureText: { fontSize: 13, color: COLORS.textSecondary },
+
+  planSelector: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md },
   planOption: {
-    flex: 1,
-    borderRadius: 12,
-    padding: SPACING.sm,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.background,
-    alignItems: 'center',
+    flex: 1, borderRadius: 10, padding: SPACING.sm,
+    borderWidth: 1, borderColor: COLORS.border,
+    backgroundColor: COLORS.surfaceElevated, alignItems: 'center',
   },
-  planOptionSelected: {
-    borderColor: COLORS.secondary,
-    backgroundColor: '#E6FAF8',
-  },
-  planBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  planLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-  },
-  planLabelSelected: {
-    color: COLORS.text,
-  },
-  planPrice: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  planPriceSelected: {
-    color: COLORS.secondary,
-  },
-  planSubPrice: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    marginTop: 1,
-  },
-  saveBadge: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
-  saveBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  proActiveCard: {
-    backgroundColor: '#F0FDF9',
-    borderRadius: 12,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.secondary,
-    alignItems: 'center',
-  },
-  proActiveText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.secondary,
-  },
-  proActiveDesc: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginTop: 4,
-  },
+  planSelected: { borderColor: COLORS.primary },
+  planBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  planLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary },
+  planLabelSelected: { color: COLORS.text },
+  planPrice: { fontSize: 18, fontWeight: '900', color: COLORS.textSecondary, marginTop: 2 },
+  planPriceSelected: { color: COLORS.primary },
+  planSub: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2, fontWeight: '600' },
+  saveBadge: { backgroundColor: COLORS.primary, borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 },
+  saveBadgeText: { color: '#FFFFFF', fontSize: 9, fontWeight: '800' },
+
   proButton: {
-    backgroundColor: COLORS.secondary,
-    borderRadius: 12,
-    paddingVertical: SPACING.sm,
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-    minHeight: 44,
-    justifyContent: 'center',
+    backgroundColor: COLORS.primary, borderRadius: 10, paddingVertical: SPACING.md,
+    alignItems: 'center', marginBottom: SPACING.sm, minHeight: 44, justifyContent: 'center',
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  buttonDisabled: { opacity: 0.5 },
+  proButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
+  restoreButton: { alignItems: 'center', paddingVertical: SPACING.xs },
+  restoreText: { color: COLORS.textSecondary, fontSize: 12, fontWeight: '600' },
+  legalNotice: { textAlign: 'center', marginTop: SPACING.sm, fontSize: 11, color: COLORS.textMuted },
+  legalLink: { color: COLORS.textSecondary, textDecorationLine: 'underline' },
+
+  proActiveCard: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
+    backgroundColor: COLORS.surface, borderRadius: 8, padding: SPACING.md,
+    borderWidth: 1, borderColor: COLORS.primary,
   },
-  proButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+  proActiveTitle: { fontSize: 14, fontWeight: '800', color: COLORS.text },
+  proActiveDesc: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+
+  dangerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    padding: SPACING.md, marginBottom: SPACING.sm,
+    borderWidth: 1, borderColor: '#2A1010', borderRadius: 8,
+    backgroundColor: '#160808',
   },
-  restoreButton: {
-    alignItems: 'center',
-    paddingVertical: SPACING.xs,
-  },
-  restoreButtonText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-  },
-  dangerItem: {
-    borderColor: '#FFCDD2',
-  },
-  dangerText: {
-    color: COLORS.danger,
-  },
+  dangerText: { fontSize: 14, color: COLORS.danger, fontWeight: '600' },
 });

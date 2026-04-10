@@ -3,7 +3,7 @@
  * API失敗・成功などの短時間フィードバックを画面上部に表示する
  */
 
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { Animated, Text, StyleSheet, Platform } from 'react-native';
 import { COLORS, SPACING } from '@/constants/config';
 
@@ -21,7 +21,7 @@ type Props = {
  * トースト通知を表示するコンポーネント
  * visible=true になると自動で表示→フェードアウトする
  */
-export function Toast({ message, type = 'info', visible, onHide, duration = 3000 }: Props) {
+export const Toast = memo(function Toast({ message, type = 'info', visible, onHide, duration = 3000 }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export function Toast({ message, type = 'info', visible, onHide, duration = 3000
       <Text style={styles.message}>{message}</Text>
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

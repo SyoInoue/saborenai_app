@@ -3,7 +3,7 @@
  * データ読み込み中にプレースホルダーを表示する
  */
 
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
 import { COLORS, SPACING } from '@/constants/config';
 
@@ -17,7 +17,7 @@ type SkeletonBoxProps = {
 /**
  * アニメーション付きスケルトンボックス
  */
-export function SkeletonBox({ width = '100%', height = 20, borderRadius = 8, style }: SkeletonBoxProps) {
+export const SkeletonBox = memo(function SkeletonBox({ width = '100%', height = 20, borderRadius = 8, style }: SkeletonBoxProps) {
   const opacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
@@ -49,12 +49,12 @@ export function SkeletonBox({ width = '100%', height = 20, borderRadius = 8, sty
       ]}
     />
   );
-}
+});
 
 /**
  * HabitCard のスケルトン（ローディング中に表示）
  */
-export function HabitCardSkeleton() {
+export const HabitCardSkeleton = memo(function HabitCardSkeleton() {
   return (
     <View style={styles.cardSkeleton}>
       <View style={styles.cardHeader}>
@@ -65,12 +65,12 @@ export function HabitCardSkeleton() {
       <SkeletonBox width="100%" height={44} borderRadius={12} style={{ marginTop: SPACING.md }} />
     </View>
   );
-}
+});
 
 /**
  * ストリークカードのスケルトン
  */
-export function StreakSkeleton() {
+export const StreakSkeleton = memo(function StreakSkeleton() {
   return (
     <View style={styles.streakSkeleton}>
       <SkeletonBox width={56} height={56} borderRadius={28} />
@@ -80,7 +80,7 @@ export function StreakSkeleton() {
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   skeleton: {

@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import type { Habit, HabitFormData, HabitLog, HabitWithLog, HabitCardStatus, WeekDay } from '@/types';
 
+
 /**
  * 今日の曜日番号を取得する（0=日曜日）
  */
@@ -50,8 +51,13 @@ export function useHabits() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [todayLogs, setTodayLogs] = useState<HabitLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [justPenalizedHabit, setJustPenalizedHabit] = useState<{ habitName: string } | null>(null);
   // 複数箇所でuseHabitsを使う際にチャンネル名が衝突しないよう一意IDを付与
   const channelSuffix = useRef(`${Date.now()}_${Math.random().toString(36).slice(2)}`).current;
+  // stale closure対策: habitsの最新値をrefで保持
+  const habitsRef = useRef<Habit[]>([]);
+  // stale closure対策: todayLogsの最新値をrefで保持（state updater外でペナルティ検知するために必要）
+  const todayLogsRef = useRef<HabitLog[]>([]);
 
   /**
    * 習慣一覧を取得する
@@ -67,13 +73,13 @@ export function useHabits() {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('習慣取得エラー:', error);
       setIsLoading(false);
       return;
     }
 
     const result = (data ?? []) as Habit[];
     setHabits(result);
+    habitsRef.current = result;
 
     // 習慣が0件の場合はログ待ちがないので即座にローディング完了
     // 1件以上の場合は upsertTodayLogs 完了後に isLoading=false になる
@@ -123,7 +129,7 @@ export function useHabits() {
       .upsert(logsToUpsert, { onConflict: 'habit_id,target_date', ignoreDuplicates: true });
 
     if (upsertError) {
-      console.error('ログUPSERTエラー:', upsertError);
+      // upsert error is non-fatal; continue to fetch existing logs
     }
 
     // 今日のログを取得
@@ -134,12 +140,26 @@ export function useHabits() {
       .eq('target_date', today);
 
     if (fetchError) {
-      console.error('ログ取得エラー:', fetchError);
       setIsLoading(false);
       return;
     }
 
-    setTodayLogs((logs ?? []) as HabitLog[]);
+    const logsData = (logs ?? []) as HabitLog[];
+
+    // refetch時もペナルティ執行を検知（ホーム画面に戻った時など）
+    const currentLogs = todayLogsRef.current;
+    if (currentLogs.length > 0) {
+      logsData.forEach((newLog) => {
+        const old = currentLogs.find((l) => l.id === newLog.id);
+        if (old && !old.penalty_executed_at && newLog.penalty_executed_at) {
+          const habit = habitsRef.current.find((h) => h.id === newLog.habit_id);
+          if (habit) setJustPenalizedHabit({ habitName: habit.name });
+        }
+      });
+    }
+
+    todayLogsRef.current = logsData;
+    setTodayLogs(logsData);
     setIsLoading(false);
   }, [user]);
 
@@ -166,9 +186,8 @@ export function useHabits() {
       name: formData.name,
       deadline_time: `${formData.deadline_time}:00`, // HH:MM → HH:MM:SS
       repeat_days: formData.repeat_days,
-      penalty_type: formData.penalty_type,
+      penalty_type: 'text',
       penalty_text: formData.penalty_text,
-      selfie_storage_path: formData.selfie_storage_path,
     });
 
     if (error) throw new Error(error.message);
@@ -179,12 +198,35 @@ export function useHabits() {
    * 習慣を削除する（論理削除）
    */
   const deleteHabit = async (habitId: string): Promise<void> => {
+    if (!user) throw new Error('未認証');
+
+    // 楽観的更新: API応答を待たず即座にローカルから除去
+    const prev = habitsRef.current;
+    const next = prev.filter((h) => h.id !== habitId);
+    setHabits(next);
+    habitsRef.current = next;
+
     const { error } = await supabase
       .from('habits')
       .update({ is_active: false })
-      .eq('id', habitId);
+      .eq('id', habitId)
+      .eq('user_id', user.id);
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      // 失敗時はロールバック
+      setHabits(prev);
+      habitsRef.current = prev;
+      throw new Error(error.message);
+    }
+
+    // 今日の未ペナルティログを削除（check-deadlineがペナルティを発動するのを防ぐ）
+    await supabase
+      .from('habit_logs')
+      .delete()
+      .eq('habit_id', habitId)
+      .eq('target_date', getTodayString())
+      .eq('penalty_triggered', false);
+
     await fetchHabits();
   };
 
@@ -192,11 +234,14 @@ export function useHabits() {
    * 習慣を完了にする
    */
   const completeHabit = async (logId: string): Promise<void> => {
+    if (!user) throw new Error('未認証');
     const now = new Date().toISOString();
+    // RLSに加えてuser_idフィルタを明示（多層防御）
     const { error } = await supabase
       .from('habit_logs')
       .update({ completed_at: now })
-      .eq('id', logId);
+      .eq('id', logId)
+      .eq('user_id', user.id);
 
     if (error) throw new Error(error.message);
 
@@ -243,42 +288,28 @@ export function useHabits() {
         { event: '*', schema: 'public', table: 'habit_logs', filter: `user_id=eq.${user.id}` },
         (payload) => {
           const updated = payload.new as HabitLog;
-          setTodayLogs((prev) =>
-            prev.map((log) => (log.id === updated.id ? updated : log))
-          );
+          // state updater外でペナルティ検知（updater内でsetStateを呼ぶのはアンチパターン）
+          const old = todayLogsRef.current.find((l) => l.id === updated.id);
+          if (old && !old.penalty_executed_at && updated.penalty_executed_at) {
+            const habit = habitsRef.current.find((h) => h.id === updated.habit_id);
+            if (habit) setJustPenalizedHabit({ habitName: habit.name });
+          }
+          setTodayLogs((prev) => {
+            const next = prev.map((log) => (log.id === updated.id ? updated : log));
+            todayLogsRef.current = next;
+            return next;
+          });
         }
       )
       .subscribe();
 
-    // リアルタイムが届かない場合の保険: 30秒ごとに今日のログをポーリング
-    const pollInterval = setInterval(async () => {
-      const today = getTodayString();
-      const { data } = await supabase
-        .from('habit_logs')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('target_date', today);
-      if (data) {
-        setTodayLogs((prev) => {
-          // penalty_executed_at など変化があった場合のみ更新
-          const hasChange = data.some((newLog) => {
-            const old = prev.find((l) => l.id === newLog.id);
-            return !old ||
-              old.penalty_executed_at !== newLog.penalty_executed_at ||
-              old.penalty_triggered !== newLog.penalty_triggered ||
-              old.completed_at !== newLog.completed_at;
-          });
-          return hasChange ? (data as HabitLog[]) : prev;
-        });
-      }
-    }, 30000);
-
     return () => {
       supabase.removeChannel(habitsSubscription);
       supabase.removeChannel(logsSubscription);
-      clearInterval(pollInterval);
     };
   }, [user, fetchHabits]);
+
+  const clearJustPenalized = () => setJustPenalizedHabit(null);
 
   return {
     habits,
@@ -288,5 +319,7 @@ export function useHabits() {
     deleteHabit,
     completeHabit,
     refetch: fetchHabits,
+    justPenalizedHabit,
+    clearJustPenalized,
   };
 }

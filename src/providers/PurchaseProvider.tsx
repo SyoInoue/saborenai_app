@@ -19,6 +19,9 @@ import type { PurchaseContextType, ProPlan } from '@/types';
 // RevenueCat APIキー（環境変数から取得）
 const REVENUECAT_API_KEY_IOS = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_IOS ?? '';
 
+// 開発中のテスト用: true にすると課金なしで Pro 扱いになる
+const DEBUG_FORCE_PRO = process.env.EXPO_PUBLIC_DEBUG_FORCE_PRO === 'true';
+
 // =====================================================
 // コンテキスト定義
 // =====================================================
@@ -68,11 +71,17 @@ type Props = {
 
 export function PurchaseProvider({ children }: Props) {
   const [state, dispatch] = useReducer(purchaseReducer, {
-    isPro: false,
-    isLoading: true,
+    isPro: DEBUG_FORCE_PRO, // デバッグ時は初期値をtrue
+    isLoading: !DEBUG_FORCE_PRO,
   });
 
   useEffect(() => {
+    // デバッグモード: RevenueCat をスキップして即 Pro 扱い
+    if (DEBUG_FORCE_PRO) {
+      dispatch({ type: 'SET_PRO', payload: true });
+      return;
+    }
+
     // RevenueCat 初期化
     if (Platform.OS === 'ios') {
       Purchases.setLogLevel(LOG_LEVEL.ERROR);
@@ -84,8 +93,7 @@ export function PurchaseProvider({ children }: Props) {
       try {
         const customerInfo = await Purchases.getCustomerInfo();
         dispatch({ type: 'SET_PRO', payload: checkIsPro(customerInfo) });
-      } catch (error) {
-        console.error('RevenueCat customerInfo取得エラー:', error);
+      } catch {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     };
@@ -126,7 +134,6 @@ export function PurchaseProvider({ children }: Props) {
       // ユーザーがキャンセルした場合は無視
       const purchaseError = error as { userCancelled?: boolean };
       if (!purchaseError.userCancelled) {
-        console.error('購入エラー:', error);
         Alert.alert('購入エラー', '購入処理に失敗しました。もう一度お試しください。');
       }
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -147,8 +154,7 @@ export function PurchaseProvider({ children }: Props) {
         '復元完了',
         isPro ? 'Proプランを復元しました！' : '復元できる購入履歴がありませんでした。'
       );
-    } catch (error) {
-      console.error('復元エラー:', error);
+    } catch {
       Alert.alert('復元エラー', '購入の復元に失敗しました。');
       dispatch({ type: 'SET_LOADING', payload: false });
     }
