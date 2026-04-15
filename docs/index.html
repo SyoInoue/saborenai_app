@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YARANEVA - 法的情報</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: #111111; color: #FFFFFF;
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+    header {
+      background: #161616; border-bottom: 2px solid #E8002A;
+      padding: 20px 24px;
+    }
+    header .logo { font-size: 22px; font-weight: 900; letter-spacing: 3px; }
+    header .logo span { color: #E8002A; }
+    main {
+      flex: 1; max-width: 600px; margin: 0 auto;
+      padding: 64px 24px; text-align: center;
+    }
+    h1 { font-size: 14px; color: #888; letter-spacing: 2px; margin-bottom: 32px; text-transform: uppercase; }
+    .links { display: flex; flex-direction: column; gap: 16px; }
+    a.link-card {
+      display: block; background: #202020; border: 1px solid #2A2A2A;
+      border-radius: 8px; padding: 20px 24px; text-decoration: none;
+      transition: border-color 0.2s;
+    }
+    a.link-card:hover { border-color: #E8002A; }
+    .link-card .title { font-size: 16px; font-weight: 800; color: #FFFFFF; margin-bottom: 4px; }
+    .link-card .desc { font-size: 13px; color: #888; }
+    footer { text-align: center; color: #555; font-size: 12px; padding: 24px; border-top: 1px solid #2A2A2A; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">YARA<span>NEVA</span></div>
+  </header>
+  <main>
+    <h1>法的情報 / Legal</h1>
+    <div class="links">
+      <a href="./privacy-policy.html" class="link-card">
+        <div class="title">プライバシーポリシー</div>
+        <div class="desc">個人情報の取り扱いについて</div>
+      </a>
+      <a href="./terms-of-service.html" class="link-card">
+        <div class="title">利用規約</div>
+        <div class="desc">サービス利用条件について</div>
+      </a>
+    </div>
+  </main>
+  <footer>&copy; 2026 YARANEVA. All rights reserved.</footer>
+</body>
+</html>
