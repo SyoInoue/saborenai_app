@@ -53,5 +53,5 @@ export const PENALTY_TYPE_TEXT = 'text' as const;
 export const PENALTY_TWEET_TEXT = '私はサボりました。だらしのない人間です。';
 
 /** AdMob テスト用ID (本番では差し替え) */
-export const ADMOB_BANNER_ID_IOS = 'ca-app-pub-3940256099942544/2934735716';
+export const ADMOB_BANNER_ID_IOS = 'ca-app-pub-5506706107288721/3423988308';
 export const ADMOB_BANNER_ID_ANDROID = 'ca-app-pub-3940256099942544/6300978111';
