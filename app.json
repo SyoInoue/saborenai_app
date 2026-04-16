@@ -14,6 +14,7 @@
     },
     "ios": {
       "supportsTablet": false,
+      "requireFullScreen": true,
       "bundleIdentifier": "com.inouesyo.saboapp",
       "infoPlist": {
         "NSCameraUsageDescription": "ペナルティ用の自撮り写真を撮影するために使用します。",
@@ -21,7 +22,7 @@
         "NSUserNotificationsUsageDescription": "習慣のリマインダーとペナルティ通知を送信するために使用します.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "3"
+      "buildNumber": "5"
     },
     "android": {
       "adaptiveIcon": {
